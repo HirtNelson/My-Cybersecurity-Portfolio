@@ -63,7 +63,7 @@ IP[10.64.169.209], PasswordField[password], Title[Login]
 ```
 The web service identified by whatweb operates on the unconventional port 1337, featuring a functional login page under the HTTP 200 protocol. The backend is PHP-based, as evidenced by the PHPSESSID session cookie, and the frontend utilizes the Bootstrap framework in HTML5. The entire application is hosted on an Apache 2.4.41 server running on Ubuntu Linux. The presence of a password field indicates an authentication-focused attack surface, while the software versions suggest a relatively modern Linux environment (likely Ubuntu 20.04).
 
-![login page](/images/image.png)
+![login page](./images/image.png)
 
 ```html
 <!DOCTYPE html>
@@ -160,13 +160,13 @@ ___
 
 ## Exploitation
 
-![alt text](/images/image-1.png)
+![alt text](./images/image-1.png)
 
-![alt text](/images/image-2.png)
+![alt text](./images/image-2.png)
 
 The page displays a generic error message for both email and password inputs. Since it doesn't specify which credential is incorrect, email enumeration via brute force is not feasible.
 
-![alt text](/images/image-3.png)
+![alt text](./images/image-3.png)
 
 ```html
 
@@ -223,11 +223,11 @@ The page displays a generic error message for both email and password inputs. Si
 Client-Side Logic Flaw: The `startCountdown` function updates a hidden input field (`id="s"`). If the server relies on this field to validate session expiration, it can be manipulated by the user to bypass timeout restrictions.
 Endpoint Interaction: The password reset form points to the current page via `POST`, serving as the primary entry point for testing the leaked email `tester@hammer.thm`.
 
-![alt text](/images/image-4.png)
+![alt text](./images/image-4.png)
 
-![alt text](/images/image-5.png)
+![alt text](./images/image-5.png)
 
-![alt text](/images/image-6.png)
+![alt text](./images/image-6.png)
 
 ```html
 
@@ -285,9 +285,9 @@ Endpoint Interaction: The password reset form points to the current page via `PO
 </html>
 
 ```
-![alt text](/images/image-7.png)
+![alt text](./images/image-7.png)
 
-![alt text](/images/image-8.png)
+![alt text](./images/image-8.png)
 
 ### **Exploitation Phase: Password Reset Bypass**
 
@@ -360,13 +360,13 @@ The following script was developed to automate the recovery code discovery by we
  **Time-Limit Bypass:** Each payload includes `s: 180`, forcing the server to process the request within a supposedly valid time window.
  **Success Detection:** The script monitors the HTTP response body. Since the server returns a specific error for incorrect codes, any variation in the response indicates a successful bypass and code identification.
 
-![alt text](/images/image-9.png)
+![alt text](./images/image-9.png)
 
-![alt text](/images/image-10.png)
+![alt text](./images/image-10.png)
 
-![alt text](/images/image-11.png)
+![alt text](./images/image-11.png)
 
-![alt text](/images/image-12.png)
+![alt text](./images/image-12.png)
 
 ```html
 
@@ -456,11 +456,11 @@ An active JWT Token was found hardcoded in the Dashboard's HTML. This exposure g
 
 The dashboard's client-side code leaks the API interaction logic via an AJAX script. It explicitly defines the `execute_command.php` path and the JSON structure required for command execution.
 
-![alt text](/images/image-13.png)
+![alt text](./images/image-13.png)
 
 The token uses the HS256 algorithm and reveals the location of the validation key on the server via the kid field (/var/www/mykey.key). The iat and exp fields use Unix format to establish an access duration of exactly 1 hour, while the payload identifies the logged-in user with limited privileges (role: user), ID 1, and the tester's email.
 
-![alt text](/images/image-14.png)
+![alt text](./images/image-14.png)
 
 ```python
 
@@ -537,7 +537,7 @@ if __name__ == "__main__":
     start_fuzz()
 
 ```
-![alt text](/images/image-15.png)
+![alt text](./images/image-15.png)
 
 ## **Finding the Attack Vector and Bypassing the Whitelist**
 
@@ -548,7 +548,7 @@ To efficiently identify which commands were accepted by the system, I developed 
 **Fuzzing Results:**
 Through this automation, I discovered that the `ls` command was permitted. The server responded with a JSON object containing an `"output"` key, revealing the file structure of the web directory:
 
-![alt text](/images/image-16.png)
+![alt text](./images/image-16.png)
 
 ## **Exfiltrating the Signing Key for JWT Forgery**
 
@@ -559,7 +559,7 @@ Analysis of the initial JWT captured during the session revealed that the applic
 **Exploitation Strategy:**
 With the signing key in hand, I can now forge a custom JWT. By modifying the payload to change the `user_id` to `1` or the `role` to `admin`, and re-signing the token using the exfiltrated key, I can escalate privileges and bypass the application's security boundaries.
 
-![alt text](/images/image-17.png)
+![alt text](./images/image-17.png)
 
 To finalize the attack, I leveraged the stolen key to sign a custom-made JWT. The script below automates the creation of this token, ensuring the iat (Issued At) and exp (Expiration) claims are valid, while elevating the role to admin. This forged identity allows for full access to the restricted administrative dashboard.
 
@@ -615,9 +615,9 @@ if __name__ == "__main__":
     generate_admin_token()
 
 ```
-![alt text](/images/image-18.png)
+![alt text](./images/image-18.png)
 
-![alt text](/images/image-19.png)
+![alt text](./images/image-19.png)
 
 ## The attack on the Hammer laboratory demonstrated a complete exploitation chain, ranging from an injection flaw to the total compromise of the authentication system:
 
