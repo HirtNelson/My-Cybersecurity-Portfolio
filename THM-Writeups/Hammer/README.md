@@ -1,9 +1,9 @@
 <table>
   <tr>
-    <td width="160">
+    <td>
       <img src="https://tryhackme-images.s3.amazonaws.com/room-icons/62a7685ca6e7ce005d3f3afe-1723567516578" width="150">
     </td>
-    <td>
+    <td width="900">
       <h1>Hammer</h1>
       <p>Use your exploitation skills to bypass authentication mechanisms on a website and get RCE.</p>
       <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square">
