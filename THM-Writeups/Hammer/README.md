@@ -4,20 +4,20 @@
       <img src="https://tryhackme-images.s3.amazonaws.com/room-icons/62a7685ca6e7ce005d3f3afe-1723567516578" width="150">
     </td>
     <td width="900">
-      <h1>Hammer</h1>
-      <p>Use your exploitation skills to bypass authentication mechanisms on a website and get RCE.</p>
-      <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square">
-      <img src="https://img.shields.io/badge/Level-Medium-orange?style=flat-square">
-      <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square">
-      <blockquote>By <strong>Nelson Hirt</strong></blockquote>
+      <h1>Hammer</h1>      
+      <p>Use your exploitation skills to bypass authentication mechanisms on a website and get RCE.</p>      
+      <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square"> &nbsp;
+      <img src="https://img.shields.io/badge/Level-Medium-orange?style=flat-square"> &nbsp;
+      <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square">  
     </td>
   </tr>
 </table>
 
 ## 1. Machine Overview
 
-* [https://tryhackme.com/room/hammer](https://tryhackme.com/room/hammer)
-* Exploit web vulnerabilities to bypass authentication mechanisms and achieve Remote Code Execution (RCE).
+- **Room:** [Hammer](https://tryhackme.com/room/hammer)
+- **Platform:** TryHackMe
+- **Objective:** Exploit web vulnerabilities to bypass authentication mechanisms and achieve Remote Code Execution (RCE)
 
 > [!IMPORTANT]
 > After spawning the machine, map the target IP to the local hostname to ensure all scripts and links work correctly.
@@ -25,38 +25,34 @@
 ```bash
 echo "<TARGET_IP> hammer.thm" | sudo tee -a /etc/hosts
 ```
+### Lab Objectives
 
-### Lab Objectives:
-
-* Challenge 1: What is the value of the "flag" displayed immediately after a successful login to the control panel?
-* Challenge 2: What is the content of the protected file located at /home/ubuntu/flag.txt?
+- **Challenge 1:** What is the value of the flag displayed immediately after a successful login to the control panel?
+- **Challenge 2:** What is the content of the protected file located at `/home/ubuntu/flag.txt`?
 
 ## 2. Reconnaissance
-
 ### Network Connectivity
-The first step was to verify connectivity with the target machine and confirm the IP mapping in the `/etc/hosts` file.
+The initial step was to validate network connectivity and ensure the target hostname was correctly mapped in `/etc/hosts`.
 
-> Testing connection
+> **Testing connectivity**
 ```bash
 ping -c 3 hammer.thm
 
 PING hammer.thm (10.64.169.209) 56(84) bytes of data.
 64 bytes from hammer.thm (10.64.169.209): icmp_seq=1 ttl=62 time=150 ms
-
 ```
-> Port scanner
+> **Port scanning**
 ```bash
-sudo nmap -Pn -n -sS 10.64.169.209 --top-ports 10000 --min-rate 1000
+sudo nmap -Pn -n -sS --top-ports 10000 --min-rate 1000 10.64.169.209
 
 Starting Nmap 7.98 ( https://nmap.org ) at 2025-12-19 19:32 -0300
 Nmap scan report for 10.64.169.209
 Host is up (0.16s latency).
 PORT     STATE SERVICE
 22/tcp   open  ssh
-1337/tcp open  
-
+1337/tcp open  unknown
 ```
-> Infrastructure information
+> **Infrastructure information**
 ```bash
 whatweb http://hammer.thm:1337
 
@@ -65,15 +61,23 @@ Country[RESERVED][ZZ], HTML5, HTTPServer[Ubuntu Linux][Apache/2.4.41 (Ubuntu)],
 IP[10.64.169.209], PasswordField[password], Title[Login]
 
 ```
+> [!NOTE]
+> **Summary**  
+> The web service identified by `whatweb` operates on the non-standard port **1337** and presents a functional login page returning **HTTP 200**.  
+> The backend appears to be **PHP-based**, as indicated by the `PHPSESSID` session cookie, while the frontend leverages the **Bootstrap** framework with **HTML5**.  
+> The application is hosted on **Apache 2.4.41** running on **Ubuntu Linux**, suggesting a relatively modern environment (likely Ubuntu 20.04).  
+> The presence of a password field highlights an **authentication-focused attack surface**.
 
-> [!NOTE] Summary
-The web service identified by whatweb operates on the unconventional port 1337, featuring a functional login page under the HTTP 200 protocol. The backend is PHP-based, as evidenced by the PHPSESSID session cookie, and the frontend utilizes the Bootstrap framework in HTML5. The entire application is hosted on an Apache 2.4.41 server running on Ubuntu Linux. The presence of a password field indicates an authentication-focused attack surface, while the software versions suggest a relatively modern Linux environment (likely Ubuntu 20.04).
+> **The page exposes a standard authentication form with username and password fields.**
+![Login Page](./images/login.png)
 
-> Login page - Port 1337
+> ### Source Code 
+The following snippet represents the HTML source of the login page exposed on port **1337**.  
+Notable observations are highlighted after the code block.
 
-![login page](./images/login.png)
+<details>
+<summary><strong>View source code!</strong></summary>
 
-> Source Code 
 ```html
 <!DOCTYPE html>
 <html lang="en">
@@ -82,7 +86,7 @@ The web service identified by whatweb operates on the unconventional port 1337, 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <link href="/hmr_css/bootstrap.min.css" rel="stylesheet">
-	<!-- Dev Note: Directory naming convention must be hmr_DIRECTORY_NAME -->
+    <!-- Dev Note: Directory naming convention must be hmr_DIRECTORY_NAME -->
 </head>
 <body>
 <div class="container mt-5">
@@ -109,10 +113,17 @@ The web service identified by whatweb operates on the unconventional port 1337, 
 </body>
 </html>
 ```
-> [!NOTE] Summary
-Development comment in the source code revealing the server's naming convention: hmr_DIRECTORY_NAME. This indicates that directories use the hmr_ prefix, as previously observed with the /hmr_css/ folder.
+</details>
 
-> Fuzzing
+### Observations
+- The login form submits data via **POST** with an empty `action`, implying self-processing.
+- No client-side input validation beyond `required` is present.
+- The developer comment hints at a **custom directory naming convention** (`hmr_`), which may be useful for **directory enumeration or path discovery**.
+- The presence of a password reset endpoint (`reset_password.php`) suggests an additional authentication-related attack surface.
+
+### Fuzzing
+
+Directory fuzzing was performed based on the previously identified `hmr_` naming convention.
 
 ```bash
 ffuf -u http://hammer.thm:1337/hmr_FUZZ -w /usr/share/wordlists/dirb/common.txt -mc 200,301,302
@@ -144,12 +155,35 @@ logs                    [Status: 301, Size: 318, Words: 20, Lines: 10, Duration:
 :: Progress: [4614/4614] :: Job [1/1] :: 253 req/sec :: Duration: [0:00:21] :: Errors: 0 ::
 
 ```
-> Exfiltration logs
+### Observations
+
+- Multiple directories were discovered using the `hmr_` prefix, confirming the developer’s naming convention.
+- The presence of a `/hmr_logs/` directory suggests potential access to application or authentication logs.
+
+### Log Exfiltration
+
+The application logs were accessible through the following endpoint:
+
+- [`/hmr_logs/error.logs`](http://hammer.thm:1337/hmr_logs/error.logs)
+
+The extracted Apache error log reveals multiple authentication failures and access control issues.
 
 ```log
+[Mon Aug 19 12:02:34.876543 2024] [authz_core:error] [client 192.168.1.12:37210]
+AH01631: user tester@hammer.thm: authentication failure for "/restricted-area": Password Mismatch
 
-[http://hammer.thm:1337/hmr_logs/error.logs](http://hammer.thm:1337/hmr_logs/error.logs) 
+[Mon Aug 19 12:03:45.765432 2024] [authz_core:error] [client 192.168.1.20:37254]
+AH01627: client denied by server configuration: /etc/shadow
 
+[Mon Aug 19 12:06:18.432109 2024] [authz_core:error] [client 192.168.1.30:40232]
+AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Invalid email address
+```
+
+
+<details>
+<summary><strong>Complete Log</strong></summary>
+
+```log
 [Mon Aug 19 12:00:01.123456 2024] [core:error] [pid 12345:tid 139999999999999] [client 192.168.1.10:56832] AH00124: Request exceeded the limit of 10 internal redirects due to probable configuration error. Use 'LimitInternalRecursion' to increase the limit if necessary. Use 'LogLevel debug' to get a backtrace.
 [Mon Aug 19 12:01:22.987654 2024] [authz_core:error] [pid 12346:tid 139999999999998] [client 192.168.1.15:45918] AH01630: client denied by server configuration: /var/www/html/
 [Mon Aug 19 12:02:34.876543 2024] [authz_core:error] [pid 12347:tid 139999999999997] [client 192.168.1.12:37210] AH01631: user tester@hammer.thm: authentication failure for "/restricted-area": Password Mismatch
@@ -159,12 +193,17 @@ logs                    [Status: 301, Size: 318, Words: 20, Lines: 10, Duration:
 [Mon Aug 19 12:06:18.432109 2024] [authz_core:error] [pid 12351:tid 139999999999993] [client 192.168.1.30:40232] AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Invalid email address
 [Mon Aug 19 12:07:29.321098 2024] [core:error] [pid 12352:tid 139999999999992] [client 192.168.1.35:42310] AH00124: Request exceeded the limit of 10 internal redirects due to probable configuration error. Use 'LimitInternalRecursion' to increase the limit if necessary. Use 'LogLevel debug' to get a backtrace.
 [Mon Aug 19 12:09:51.109876 2024] [core:error] [pid 12354:tid 139999999999990] [client 192.168.1.50:45998] AH00037: Symbolic link not allowed or link target not accessible: /var/www/html/locked-
-
 ```
-> [!NOTE] FFUF found four directories, and the structure is exactly what the dev note suggested:
-> * hmr_logs: This is the most interesting one. The logs revealed:
-> * Valid email: `tester@hammer.thm`
-> * The directories /hmr_images/, /hmr_js/, and /hmr_css/ do not contain any custom or sensitive files.
+</details>
+
+### ⚠️ Security Impact
+- The logs disclose a valid user account: `tester@hammer.thm`.
+- Multiple authentication failures suggest brute-force or logic-based attacks.
+- Requests targeting sensitive paths such as `/etc/shadow` and `/admin-login`.
+- Log files are directly accessible via the web server, representing a **critical information disclosure vulnerability**.
+
+
+
 
 
 ## 3 Exploitation
