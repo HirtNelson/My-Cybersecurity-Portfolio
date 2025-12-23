@@ -1,70 +1,72 @@
-# Write-up: Hammer
+# Hammer
 > Technical documentation by **Nelson Hirt**
 
----
+<p align="left">
+  <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Level-Medium-orange?style=flat-square" alt="Level">
+  <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square" alt="Category">
+</p>
 
 ## 1. Machine Overview
-* **Name:** Hammer
-* **Platform:** TryHackMe
-* **Level:** Medium
-* **Objective:** Exploit web vulnerabilities to bypass authentication and access the dashboard.
-  
----
 
-**Link:** [https://tryhackme.com/room/hammer](https://tryhackme.com/room/hammer)
+* [https://tryhackme.com/room/hammer](https://tryhackme.com/room/hammer)
+* Exploit web vulnerabilities to bypass authentication mechanisms and achieve Remote Code Execution (RCE).
 
-Use your exploitation skills to bypass authentication mechanisms on a website and get RCE.
-
-## Initial Steps
-After receiving the instance IP, add it to your `/etc/hosts` file to make access easier:
+> [!IMPORTANT]
+> After spawning the machine, map the target IP to the local hostname to ensure all scripts and links work correctly.
 
 ```bash
 echo "<TARGET_IP> hammer.thm" | sudo tee -a /etc/hosts
-
 ```
 
-### Lab Objectives
+### Lab Objectives:
 
-Challenge 1: What is the value of the "flag" displayed immediately after a successful login to the control panel?
-Challenge 2: What is the content of the protected file located at /home/ubuntu/flag.txt?
+* Challenge 1: What is the value of the "flag" displayed immediately after a successful login to the control panel?
+* Challenge 2: What is the content of the protected file located at /home/ubuntu/flag.txt?
 
 ## 2. Reconnaissance
 
 ### Network Connectivity
 The first step was to verify connectivity with the target machine and confirm the IP mapping in the `/etc/hosts` file.
 
+> Testing connection
 ```bash
 ping -c 3 hammer.thm
+
 PING hammer.thm (10.64.169.209) 56(84) bytes of data.
 64 bytes from hammer.thm (10.64.169.209): icmp_seq=1 ttl=62 time=150 ms
 
 ```
-
+> Port scanner
 ```bash
-┌──(㉿kali)-[~]
-└─$ sudo nmap -Pn -n -sS 10.64.169.209 --top-ports 10000 --min-rate 1000
+sudo nmap -Pn -n -sS 10.64.169.209 --top-ports 10000 --min-rate 1000
+
 Starting Nmap 7.98 ( https://nmap.org ) at 2025-12-19 19:32 -0300
 Nmap scan report for 10.64.169.209
 Host is up (0.16s latency).
 PORT     STATE SERVICE
 22/tcp   open  ssh
-1337/tcp open  waste
-Nmap done: 1 IP address (1 host up) scanned in 8.70 seconds
+1337/tcp open  
 
 ```
-
+> Infrastructure information
 ```bash
-┌──(㉿kali-)-[~]
-└─$ whatweb http://hammer.thm:1337
+whatweb http://hammer.thm:1337
+
 http://hammer.thm:1337 [200 OK] Apache[2.4.41], Bootstrap, Cookies[PHPSESSID], 
 Country[RESERVED][ZZ], HTML5, HTTPServer[Ubuntu Linux][Apache/2.4.41 (Ubuntu)], 
 IP[10.64.169.209], PasswordField[password], Title[Login]
 
 ```
+
+> [!NOTE] Summary
 The web service identified by whatweb operates on the unconventional port 1337, featuring a functional login page under the HTTP 200 protocol. The backend is PHP-based, as evidenced by the PHPSESSID session cookie, and the frontend utilizes the Bootstrap framework in HTML5. The entire application is hosted on an Apache 2.4.41 server running on Ubuntu Linux. The presence of a password field indicates an authentication-focused attack surface, while the software versions suggest a relatively modern Linux environment (likely Ubuntu 20.04).
 
-![login page](./images/image.png)
+> Login page - Port 1337
 
+![login page](./images/login.png)
+
+> Source Code 
 ```html
 <!DOCTYPE html>
 <html lang="en">
@@ -100,13 +102,13 @@ The web service identified by whatweb operates on the unconventional port 1337, 
 </body>
 </html>
 ```
-
+> [!NOTE] Summary
 Development comment in the source code revealing the server's naming convention: hmr_DIRECTORY_NAME. This indicates that directories use the hmr_ prefix, as previously observed with the /hmr_css/ folder.
 
-```bash
+> Fuzzing
 
-──(㉿kali-~/
-└─$ ffuf -u http://hammer.thm:1337/hmr_FUZZ -w /usr/share/wordlists/dirb/common.txt -mc 200,301,302
+```bash
+ffuf -u http://hammer.thm:1337/hmr_FUZZ -w /usr/share/wordlists/dirb/common.txt -mc 200,301,302
 
         /'___\  /'___\           /'___\       
        /\ \__/ /\ \__/  __  __  /\ \__/       
@@ -135,6 +137,7 @@ logs                    [Status: 301, Size: 318, Words: 20, Lines: 10, Duration:
 :: Progress: [4614/4614] :: Job [1/1] :: 253 req/sec :: Duration: [0:00:21] :: Errors: 0 ::
 
 ```
+> Exfiltration logs
 
 ```log
 
@@ -148,25 +151,39 @@ logs                    [Status: 301, Size: 318, Words: 20, Lines: 10, Duration:
 [Mon Aug 19 12:05:07.543210 2024] [authz_core:error] [pid 12350:tid 139999999999994] [client 192.168.1.25:46234] AH01627: client denied by server configuration: /home/hammerthm/test.php
 [Mon Aug 19 12:06:18.432109 2024] [authz_core:error] [pid 12351:tid 139999999999993] [client 192.168.1.30:40232] AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Invalid email address
 [Mon Aug 19 12:07:29.321098 2024] [core:error] [pid 12352:tid 139999999999992] [client 192.168.1.35:42310] AH00124: Request exceeded the limit of 10 internal redirects due to probable configuration error. Use 'LimitInternalRecursion' to increase the limit if necessary. Use 'LogLevel debug' to get a backtrace.
-[Mon Aug 19 12:09:51.109876 2024] [core:error] [pid 12354:tid 139999999999990] [client 192.168.1.50:45998] AH00037: Symbolic link not allowed or link target not accessible: /var/www/html/locked-down
+[Mon Aug 19 12:09:51.109876 2024] [core:error] [pid 12354:tid 139999999999990] [client 192.168.1.50:45998] AH00037: Symbolic link not allowed or link target not accessible: /var/www/html/locked-
 
 ```
+> [!NOTE] FFUF found four directories, and the structure is exactly what the dev note suggested:
+> * hmr_logs: This is the most interesting one. The logs revealed:
+> * Valid email: `tester@hammer.thm`
+> * The directories /hmr_images/, /hmr_js/, and /hmr_css/ do not contain any custom or sensitive files.
 
-FFUF found four directories, and the structure is exactly what the dev note suggested:
-hmr_logs: This is the most interesting one. The logs revealed:
-Valid email: `tester@hammer.thm`
-The directories /hmr_images/, /hmr_js/, and /hmr_css/ do not contain any custom or sensitive files.
-___
 
-## Exploitation
+## 3 Exploitation
 
-![alt text](./images/image-1.png)
+> Testing login page
 
-![alt text](./images/image-2.png)
+![login page](./images/login2.png)
 
-The page displays a generic error message for both email and password inputs. Since it doesn't specify which credential is incorrect, email enumeration via brute force is not feasible.
+> Generic response
 
-![alt text](./images/image-3.png)
+![login page](./images/login_response.png)
+
+> [!NOTE] Change of direction
+> The page displays a generic error message for both email and password inputs. Since it doesn't specify which
+> credential is incorrect, email enumeration via brute force is not feasible.
+
+> Reset password page
+
+![reset page](./images/reset_page.png)
+---
+
+
+> Source Code Reset Password Page
+ 
+<details>
+  <summary><b>Click to view Reset Password Source Code</b></summary>
 
 ```html
 
@@ -218,10 +235,21 @@ The page displays a generic error message for both email and password inputs. Si
 </html>
 
 ```
-### Source Code Analysis Summary:
+</details>
 
+---
+---
+
+> [!IMPORTANT] Source Code Analysis Summary:
 Client-Side Logic Flaw: The `startCountdown` function updates a hidden input field (`id="s"`). If the server relies on this field to validate session expiration, it can be manipulated by the user to bypass timeout restrictions.
 Endpoint Interaction: The password reset form points to the current page via `POST`, serving as the primary entry point for testing the leaked email `tester@hammer.thm`.
+---
+---
+
+> BurpSuite capture process
+
+<details>
+    <summary><b>Clik to open the images</b></summary>
 
 ![alt text](./images/image-4.png)
 
@@ -289,15 +317,32 @@ Endpoint Interaction: The password reset form points to the current page via `PO
 
 ![alt text](./images/image-8.png)
 
+</details>
+
+---
+
 ### **Exploitation Phase: Password Reset Bypass**
 
- **User Enumeration:** A `POST` request confirmed the existence of `tester@hammer.thm` via a **302 Redirect**, triggering the delivery of a 4-digit recovery code.
- **Rate Limit Bypass (Session Rotation):** The **`Rate-Limit-Pending`** protection is tied to the **PHPSESSID** rather than the user account. Since the recovery code is persistent in the database but the attempt counter is volatile (session-bound), rotating the session cookie every 10 attempts completely resets the rate limit.
- **Time-Window Manipulation:** The 180-second expiration is managed via a user-controlled hidden field (`name="s"`). Manipulating this value allows the attacker to arbitrarily extend the session life.
- **Attack Execution:** By automating session renewal and static time-parameter injection, the 10,000 possible combinations for the recovery code can be exhausted without being blocked by the server’s security mechanisms.
-___
+### 🔍 **User Enumeration**
+A `POST` request confirmed the existence of `tester@hammer.thm` via a **302 Redirect**, triggering the delivery of a 4-digit recovery code.
 
-### Execution: Python-Based Attack
+### 🔄 **Rate Limit Bypass (Session Rotation)**
+The **`Rate-Limit-Pending`** protection is tied to the **PHPSESSID** rather than the user account. Since the recovery code is persistent in the database but the attempt counter is volatile (session-bound), rotating the session cookie every 10 attempts completely resets the rate limit.
+
+### ⏳ **Time-Window Manipulation**
+The 180-second expiration is managed via a user-controlled hidden field (`name="s"`). Manipulating this value allows the attacker to arbitrarily extend the session life.
+
+### 🚀 **Attack Execution**
+By automating session renewal and static time-parameter injection, the 10,000 possible combinations for the recovery code can be exhausted without being blocked by the server’s security mechanisms.
+
+
+ ---
+ ---
+ ---
+
+### Initiate an attack using Python 
+
+> Script python
 
 ```python
 
@@ -351,25 +396,52 @@ if __name__ == '__main__':
     main()
 
 ```
-## **Automating the Exploit: Python Script Logic**
+
+
+## **Automated Exploit Development**
 
 The following script was developed to automate the recovery code discovery by weaponizing the identified vulnerabilities:
 
- **Session Rotation:** The `new_session()` function performs a `POST` request with the target email to trigger a fresh **PHPSESSID** and reset the `Rate-Limit-Pending` counter.
- **Controlled Interval:** To ensure the rate limit is never reached, the session is renewed every **7 attempts** (defined by `RESET_INTERVAL`).
- **Time-Limit Bypass:** Each payload includes `s: 180`, forcing the server to process the request within a supposedly valid time window.
- **Success Detection:** The script monitors the HTTP response body. Since the server returns a specific error for incorrect codes, any variation in the response indicates a successful bypass and code identification.
+### 🔄 **Session Rotation**
+The `new_session()` function performs a `POST` request with the target email to trigger a fresh **PHPSESSID** and reset the `Rate-Limit-Pending` counter.
+
+### ⚖️ **Controlled Interval**
+To ensure the rate limit is never reached, the session is renewed every **7 attempts** (defined by `RESET_INTERVAL`).
+
+### ⏱️ **Time-Limit Bypass**
+Each payload includes `s: 180`, forcing the server to process the request within a supposedly valid time window.
+
+### 🎯 **Success Detection**
+The script monitors the HTTP response body. Since the server returns a specific error for incorrect codes, any variation in the response indicates a successful bypass and code identification.
+
+---
+
+> Discovery of the secret code and valid phpsessid
 
 ![alt text](./images/image-9.png)
 
+> Modify the phpsessid
+
 ![alt text](./images/image-10.png)
+
+> Logging in with a phpsessid validated by the code
 
 ![alt text](./images/image-11.png)
 
+> Accessing the dashboard and capturing the first flag
+
 ![alt text](./images/image-12.png)
 
-```html
+---
 
+---
+
+> Source code dashboard page
+
+<details>
+    <summary><b>Clik to open the source code</b></summary>
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -450,17 +522,31 @@ $(document).ready(function() {
 </html>
 
 ```
-The Dashboard page performs a local check (via JavaScript) for the `persistentSession` cookie. If the cookie is not detected, the application terminates the session and redirects the user to the login page.
+</details>
 
-An active JWT Token was found hardcoded in the Dashboard's HTML. This exposure grants immediate access to the user's authorization data.
+---
 
-The dashboard's client-side code leaks the API interaction logic via an AJAX script. It explicitly defines the `execute_command.php` path and the JSON structure required for command execution.
+> Code analysis
+>
+> The Dashboard page performs a local check (via JavaScript) for the `persistentSession` cookie. If the cookie is not detected, the application terminates the > session and redirects the user to the login page.
+>
+> An active JWT Token was found hardcoded in the Dashboard's HTML. This exposure grants immediate access to the user's authorization data.
+>
+> The dashboard's client-side code leaks the API interaction logic via an AJAX script. It explicitly defines the `execute_command.php` path and the JSON > structure required for command execution.
+
+> JWT.io
 
 ![alt text](./images/image-13.png)
 
-The token uses the HS256 algorithm and reveals the location of the validation key on the server via the kid field (/var/www/mykey.key). The iat and exp fields use Unix format to establish an access duration of exactly 1 hour, while the payload identifies the logged-in user with limited privileges (role: user), ID 1, and the tester's email.
+> Code Analysis
+> 
+> The token uses the HS256 algorithm and reveals the location of the validation key on the server via the kid field (/var/www/mykey.key). The iat and exp > fields use Unix format to establish an access duration of exactly 1 hour, while the payload identifies the logged-in user with limited privileges (role: > user), ID 1, and the tester's email.
 
+> BurpSuit - execute_code.php
+> 
 ![alt text](./images/image-14.png)
+
+> Script Python
 
 ```python
 
@@ -537,7 +623,11 @@ if __name__ == "__main__":
     start_fuzz()
 
 ```
+
+> Command Fuzz
+> 
 ![alt text](./images/image-15.png)
+
 
 ## **Finding the Attack Vector and Bypassing the Whitelist**
 
