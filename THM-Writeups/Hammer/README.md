@@ -1,11 +1,17 @@
-# Hammer
-> Technical documentation by **Nelson Hirt**
+<div style="display:flex; align-items:center; gap:10px;">
+    <img src="https://tryhackme-images.s3.amazonaws.com/room-icons/62a7685ca6e7ce005d3f3afe-1723567516578" width="150">
+    <div>
+        <h1  style="align=left; margin-down: 0;">Hammer</h1>
+        <p >Use your exploitation skills to bypass authentication mechanisms on a website and get RCE.</p>        
+            <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square" alt="Platform">
+            <img src="https://img.shields.io/badge/Level-Medium-orange?style=flat-square" alt="Level">
+            <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square" alt="Category">  
+    </div>
+</div>
 
-<p align="left">
-  <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/Level-Medium-orange?style=flat-square" alt="Level">
-  <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square" alt="Category">
-</p>
+<blockquote style="margin-top: 6px;"> By <strong>Nelson Hirt</strong></blockquote>
+
+
 
 ## 1. Machine Overview
 
