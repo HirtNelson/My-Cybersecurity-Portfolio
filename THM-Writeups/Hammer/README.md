@@ -68,8 +68,16 @@ IP[10.64.169.209], PasswordField[password], Title[Login]
 > The application is hosted on **Apache 2.4.41** running on **Ubuntu Linux**, suggesting a relatively modern environment (likely Ubuntu 20.04).  
 > The presence of a password field highlights an **authentication-focused attack surface**.
 
-> **The page exposes a standard authentication form with username and password fields.**
-![Login Page](./images/login.png)
+#### 🔑 **Initial Access Surface**
+The page exposes a standard authentication form with username and password fields. This interface serves as the primary gateway for the web application's management functions.
+
+<div align="center">
+  <img src="./images/login.png" width="1000" alt="Login Form Details">
+  <br>
+  <em>Figure: Detailed view of the authentication entry point.</em>
+</div>
+
+---
 
 > ### Source Code 
 The following snippet represents the HTML source of the login page exposed on port **1337**.  
@@ -177,6 +185,7 @@ AH01627: client denied by server configuration: /etc/shadow
 
 [Mon Aug 19 12:06:18.432109 2024] [authz_core:error] [client 192.168.1.30:40232]
 AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Invalid email address
+
 ```
 
 
@@ -202,34 +211,61 @@ AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Inva
 - Requests targeting sensitive paths such as `/etc/shadow` and `/admin-login`.
 - Log files are directly accessible via the web server, representing a **critical information disclosure vulnerability**.
 
+## 3. Exploitation
 
+#### 🌐 **Web Interface Analysis**
+Before launching automated attacks, the login interface was manually inspected to identify the primary entry point and potential security headers.
 
+<div align="center">
+  <img src="./images/login2.png" width="1000" alt="Login Page Analysis">
+  <p><em>Figure: Target authentication portal on port 1337</em></p>
+</div>
 
-
-## 3 Exploitation
-
-> Testing login page
-
-![login page](./images/login2.png)
-
-> Generic response
-
-![login page](./images/login_response.png)
-
-> [!NOTE] Change of direction
-> The page displays a generic error message for both email and password inputs. Since it doesn't specify which
-> credential is incorrect, email enumeration via brute force is not feasible.
-
-> Reset password page
-
-![reset page](./images/reset_page.png)
 ---
 
+> [!NOTE]
+> The application uses a standard Bootstrap-based form. Initial manual testing focused on identifying the response behavior for valid vs. invalid credentials, which is crucial for the subsequent user enumeration phase.
 
-> Source Code Reset Password Page
- 
-<details>
-  <summary><b>Click to view Reset Password Source Code</b></summary>
+#### 🛡️ **Authentication Response Analysis**
+When providing incorrect credentials, the application returns a generic error message. This is a security best practice implemented to prevent user enumeration.
+
+<div align="center">
+  <img src="./images/login_response.png" width="1000" alt="Generic Error Message">
+  <br>
+  
+  <em>Figure: Web application displaying a non-descriptive error response.</em>
+</div>
+
+>  **📌 Strategic Shift:** > The page displays a generic error message for both email and password inputs. Since it doesn't specify which credential is incorrect, email enumeration via traditional login brute force is not feasible. This led the investigation towards the **Password Reset** functionality to find alternative enumeration vectors.
+
+#### 🔄 **Password Recovery Interface**
+Following the generic responses from the login portal, the investigation moved to the Password Reset functionality. This page represents a secondary attack surface for potential user enumeration.
+
+<div align="center">
+  <img src="./images/reset_page.png" width="1000" alt="Reset Password Page">
+  <br>
+  <em>Figure: Password recovery interface identified on port 1337.</em>
+</div>
+
+---
+
+> **🔍 Observation:** > The form requires a registered email address to initiate the recovery process. Unlike the login page, the behavior of this form under different inputs was analyzed to determine if it leaks information about valid user accounts.
+
+#### 🔄 **Password Recovery Interface**
+Following the generic responses from the login portal, the investigation moved to the Password Reset functionality. This page represents a secondary attack surface for potential user enumeration.
+
+<div align="center">
+  <img src="./images/reset_page.png" width="600" alt="Reset Password Page">
+  <br>
+  <em>Figure: Password recovery interface identified on port 1337.</em>
+</div>
+
+---
+
+> **🔍 Observation:** > The form requires a registered email address to initiate the recovery process. Unlike the login page, the behavior of this form under different inputs was analyzed to determine if it leaks information about valid user accounts.
+
+#### ⌨️ **Source Code Analysis: Reset Password Page**
+A manual review of the recovery page's source code was performed to identify client-side logic that could be exploited during the attack.
 
 ```html
 
@@ -241,18 +277,18 @@ AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Inva
     <title>Reset Password</title>
      <link href="/hmr_css/bootstrap.min.css" rel="stylesheet">
     <script src="/hrm_js/jquery-3.6.0.min.js"></script>
-	    <script>
-	let countdownv = ;
+        <script>
+    let countdownv = ;
         function startCountdown() {
             
             let timerElement = document.getElementById("countdown");
-			const hiddenField = document.getElementById("s");
+            const hiddenField = document.getElementById("s");
             let interval = setInterval(function() {
                 countdownv--;
-				 hiddenField.value = countdownv;
+                 hiddenField.value = countdownv;
                 if (countdownv <= 0) {
                     clearInterval(interval);
-					//alert("hello");
+                    //alert("hello");
                    window.location.href = 'logout.php'; 
                 }
                 timerElement.textContent = "You have " + countdownv + " seconds to enter your code.";
@@ -260,135 +296,85 @@ AH01617: user tester@hammer.thm: authentication failure for "/admin-login": Inva
         }
     </script>
 </head>
-<body>
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-4">
-            
-                            <h3 class="text-center">Reset Password</h3>
-                <form method="POST" action="">
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="text" class="form-control" id="email" name="email" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Submit</button> 
-                </form>
-
-                    </div>
-    </div>
-</div>
-</body>
-</html>
 
 ```
-</details>
+⚠️ Critical Findings: Client-Side Logic Flaw
+Client-Side Timeout Control: The startCountdown function updates a hidden input field (id="s"). If the server relies on this field to validate session expiration, it can be manipulated by the user to bypass timeout restrictions.
 
----
----
+Endpoint Interaction: The password reset form points to the current page via POST, serving as the primary entry point for testing the leaked email tester@hammer.thm.
 
-> [!IMPORTANT] Source Code Analysis Summary:
-Client-Side Logic Flaw: The `startCountdown` function updates a hidden input field (`id="s"`). If the server relies on this field to validate session expiration, it can be manipulated by the user to bypass timeout restrictions.
-Endpoint Interaction: The password reset form points to the current page via `POST`, serving as the primary entry point for testing the leaked email `tester@hammer.thm`.
----
----
-
-> BurpSuite capture process
+#### 🛠️ **Burp Suite Capture & Traffic Analysis**
+The following captures demonstrate the interception of the password reset flow and the discovery of the hidden recovery code input structure.
 
 <details>
-    <summary><b>Clik to open the images</b></summary>
+<summary><b>📂 Click to expand: Burp Suite Screenshots & Code Analysis</b></summary>
 
-![alt text](./images/image-4.png)
-
-![alt text](./images/image-5.png)
-
-![alt text](./images/image-6.png)
+<div align="center">
+  <img src="./images/image-4.png" width="1000">
+  <img src="./images/image-5.png" width="1000">
+  <img src="./images/image-6.png" width="1000">
+</div>
+<br>
+</details>
+<br>
 
 ```html
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Password</title>
-     <link href="/hmr_css/bootstrap.min.css" rel="stylesheet">
-    <script src="/hrm_js/jquery-3.6.0.min.js"></script>
-	    <script>
-	let countdownv = 180;
-        function startCountdown() {
-            
-            let timerElement = document.getElementById("countdown");
-			const hiddenField = document.getElementById("s");
-            let interval = setInterval(function() {
-                countdownv--;
-				 hiddenField.value = countdownv;
-                if (countdownv <= 0) {
-                    clearInterval(interval);
-					//alert("hello");
-                   window.location.href = 'logout.php'; 
-                }
-                timerElement.textContent = "You have " + countdownv + " seconds to enter your code.";
-            }, 1000);
-        }
+    <script>
+    let countdownv = 180;
+    function startCountdown() {
+        let timerElement = document.getElementById("countdown");
+        const hiddenField = document.getElementById("s");
+        let interval = setInterval(function() {
+            countdownv--;
+            hiddenField.value = countdownv; // Critical vulnerability: Client-side controlled value
+            if (countdownv <= 0) {
+                clearInterval(interval);
+                window.location.href = 'logout.php'; 
+            }
+            timerElement.textContent = "You have " + countdownv + " seconds to enter your code.";
+        }, 1000);
+    }
     </script>
 </head>
 <body>
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-4">
-            
-                            <h3 class="text-center">Enter Recovery Code</h3>
-                <p id="countdown">You can enter your code in 180 seconds.</p>
-                <form method="POST" action="">
-                    <div class="mb-3">
-                        <label for="recovery_code" class="form-label">4-Digit Code</label>
-                        <input type="text" class="form-control" id="recovery_code" name="recovery_code" required>
-						  <input type="hidden" class="form-control" id="s" name="s" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Submit Code</button> 
-					<p></p>
-					<button type="button" class="btn btn-primary w-100" style="background-color: red; border-color: red;" onclick="window.location.href='logout.php';">Cancel</button>
-
-                </form>
-                <script>startCountdown();</script>
-
-                    </div>
-    </div>
-</div>
+    <form method="POST" action="">
+        <input type="text" id="recovery_code" name="recovery_code" required>
+        <input type="hidden" id="s" name="s" required> <button type="submit">Submit Code</button> 
+    </form>
 </body>
 </html>
-
 ```
-![alt text](./images/image-7.png)
 
-![alt text](./images/image-8.png)
-
-</details>
-
----
+📌 Analysis: The traffic analysis confirms that the recovery code submission includes the s parameter, which is directly tied to the client-side countdown. This confirms the feasibility of the Time-Window Manipulation attack by freezing or resetting this value in automated requests.
 
 ### **Exploitation Phase: Password Reset Bypass**
 
-### 🔍 **User Enumeration**
-A `POST` request confirmed the existence of `tester@hammer.thm` via a **302 Redirect**, triggering the delivery of a 4-digit recovery code.
+#### 🔍 **User Enumeration**
+A `POST` request confirmed the existence of `tester@hammer.thm` via a **302 Redirect**, triggering the delivery of a 4-digit recovery code. 
 
-### 🔄 **Rate Limit Bypass (Session Rotation)**
+
+
+#### 🔄 **Rate Limit Bypass (Session Rotation)**
 The **`Rate-Limit-Pending`** protection is tied to the **PHPSESSID** rather than the user account. Since the recovery code is persistent in the database but the attempt counter is volatile (session-bound), rotating the session cookie every 10 attempts completely resets the rate limit.
 
-### ⏳ **Time-Window Manipulation**
-The 180-second expiration is managed via a user-controlled hidden field (`name="s"`). Manipulating this value allows the attacker to arbitrarily extend the session life.
+#### ⏳ **Time-Window Manipulation**
+The 180-second expiration is managed via a user-controlled hidden field (`name="s"`). Manipulating this value allows the attacker to arbitrarily extend the session life by hardcoding or resetting this parameter in each request.
 
-### 🚀 **Attack Execution**
-By automating session renewal and static time-parameter injection, the 10,000 possible combinations for the recovery code can be exhausted without being blocked by the server’s security mechanisms.
+#### 🚀 **Attack Execution**
+By automating session renewal and static time-parameter injection, the 10,000 possible combinations ($0000$ - $9999$) for the recovery code can be exhausted without being blocked by the server’s security mechanisms.
 
+---
 
- ---
- ---
- ---
+---
 
-### Initiate an attack using Python 
+🐍 Automated Exploit: Recovery Code Brute-Force
+To weaponize the identified flaws, a Python script was developed. The tool automates the cycle of session rotation, time-parameter injection, and response analysis.
 
-> Script python
+<details> <summary><b>📄 Click to view the full Exploit Script (Python)</b></summary>
 
 ```python
 
@@ -442,47 +428,77 @@ if __name__ == '__main__':
     main()
 
 ```
+</details>
+<br>
 
+⚙️ Script Logic Overview
+Session Management: The new_session() function triggers a fresh PHPSESSID, ensuring the Rate-Limit-Pending counter is always below the threshold.
+
+Payload Construction: Each request forces the s parameter to 180, neutralizing the server-side expiration logic.
+
+Verification: The script uses negative matching (looking for the absence of the "Invalid" string) to identify the correct code.
 
 ## **Automated Exploit Development**
 
 The following script was developed to automate the recovery code discovery by weaponizing the identified vulnerabilities:
 
-### 🔄 **Session Rotation**
+#### 🔄 **Session Rotation**
 The `new_session()` function performs a `POST` request with the target email to trigger a fresh **PHPSESSID** and reset the `Rate-Limit-Pending` counter.
 
-### ⚖️ **Controlled Interval**
+#### ⚖️ **Controlled Interval**
 To ensure the rate limit is never reached, the session is renewed every **7 attempts** (defined by `RESET_INTERVAL`).
 
-### ⏱️ **Time-Limit Bypass**
+#### ⏱️ **Time-Limit Bypass**
 Each payload includes `s: 180`, forcing the server to process the request within a supposedly valid time window.
 
-### 🎯 **Success Detection**
+#### 🎯 **Success Detection**
 The script monitors the HTTP response body. Since the server returns a specific error for incorrect codes, any variation in the response indicates a successful bypass and code identification.
 
 ---
+> [!TIP]
+> This automated approach reduces the attack complexity from a high-interaction brute force to a controlled, reliable bypass of the server's security headers.
 
-> Discovery of the secret code and valid phpsessid
+### **Post-Exploitation: Gaining Access**
 
-![alt text](./images/image-9.png)
+Following the successful execution of the exploit script, the following steps were taken to weaponize the discovered session and access the restricted dashboard.
 
-> Modify the phpsessid
+#### 🎯 **Step 1: Recovery Code Discovery**
+The automated script successfully identified the valid 4-digit recovery code and captured a validated **PHPSESSID**.
 
-![alt text](./images/image-10.png)
+<div align="center">
+  <img src="./images/image-9.png" width="1000" alt="Code and Session Discovery">
+  <br>
+  <em>Figure: Terminal output displaying the identified code and valid session cookie.</em>
+</div>
 
-> Logging in with a phpsessid validated by the code
+#### 🛠️ **Step 2: Session Hijacking (Manual Injection)**
+Using the browser's developer tools (or a proxy like Burp Suite), the current `PHPSESSID` was replaced with the validated session cookie obtained from the script.
 
-![alt text](./images/image-11.png)
+<div align="center">
+  <img src="./images/image-10.png" width="1000" alt="Modifying PHPSESSID">
+</div>
 
-> Accessing the dashboard and capturing the first flag
+#### 🔓 **Step 3: Authentication Bypass**
+Upon refreshing the page with the injected cookie, the application recognized the session as authenticated, bypassing the standard login requirement.
 
-![alt text](./images/image-12.png)
+<div align="center">
+  <img src="./images/image-11.png" width="1000" alt="Successful Login Bypass">
+</div>
+
+#### 🚩 **Step 4: Dashboard Access & Flag Capture**
+With administrative access established, the dashboard was reached, and the first flag was successfully retrieved.
+
+<div align="center">
+  <img src="./images/image-12.png" width="1000" alt="Dashboard and Flag Capture">
+  <br>
+  <em>Figure: Administrative dashboard showing the first captured flag.</em>
+</div>
 
 ---
 
----
+#### 🖥️ **Dashboard Analysis & Post-Authentication Reconnaissance**
 
-> Source code dashboard page
+After bypassing the authentication, the dashboard source code was analyzed. This revealed a command execution interface and the use of JSON Web Tokens (JWT) for API authorization.
 
 <details>
     <summary><b>Clik to open the source code</b></summary>
@@ -570,29 +586,68 @@ $(document).ready(function() {
 ```
 </details>
 
+⚠️ Key Findings from Source Code
+Command Execution Endpoint: The dashboard interacts with execute_command.php via AJAX. This is a high-risk area for Remote Code Execution (RCE) if the input is not properly sanitized.
+
+JWT Exposure: A hardcoded JWT was found in the client-side script. Decoding this token could reveal internal user roles or the signing algorithm used.
+
+Persistence Mechanism: The script checks for a persistentSession cookie every second. If missing, it forces a logout, indicating a client-side enforced session management.
 ---
 
-> Code analysis
->
-> The Dashboard page performs a local check (via JavaScript) for the `persistentSession` cookie. If the cookie is not detected, the application terminates the > session and redirects the user to the login page.
->
-> An active JWT Token was found hardcoded in the Dashboard's HTML. This exposure grants immediate access to the user's authorization data.
->
-> The dashboard's client-side code leaks the API interaction logic via an AJAX script. It explicitly defines the `execute_command.php` path and the JSON > structure required for command execution.
+#### 🔍 **Deep Dive: Dashboard Code Analysis**
 
-> JWT.io
+The post-authentication reconnaissance revealed three significant security flaws in how the application manages sessions and commands.
 
-![alt text](./images/image-13.png)
+#### 🍪 **Client-Side Session Enforcement**
+The application performs a local check via JavaScript for the `persistentSession` cookie. If this cookie is absent, the script triggers a redirect to `logout.php`. This indicates that session persistence is weakly managed on the client side rather than being exclusively handled by the server.
 
-> Code Analysis
-> 
-> The token uses the HS256 algorithm and reveals the location of the validation key on the server via the kid field (/var/www/mykey.key). The iat and exp > fields use Unix format to establish an access duration of exactly 1 hour, while the payload identifies the logged-in user with limited privileges (role: > user), ID 1, and the tester's email.
+#### 🔑 **JWT Exposure & Hardcoded Credentials**
+A valid **JSON Web Token (JWT)** was found hardcoded within the dashboard's HTML. This exposure is critical as it grants any observer immediate access to the user's authorization claims without further authentication.
 
-> BurpSuit - execute_code.php
-> 
-![alt text](./images/image-14.png)
+#### 📡 **API Interaction Leak**
+The AJAX script explicitly leaks the interaction logic with the backend. It defines the `execute_command.php` endpoint and the expected JSON payload structure, providing a clear roadmap for intercepting and manipulating administrative commands.
 
-> Script Python
+---
+
+#### 🛠️ **JWT Decoding & Header Analysis**
+The hardcoded token was analyzed using **JWT.io** to inspect its claims and structure.
+
+<div align="center">
+  <img src="./images/image-13.png" width="1000" alt="JWT Decoding Analysis">
+  <br>
+  <em>Figure: Decoded JWT showing the Header, Payload, and Signature structure.</em>
+</div>
+
+> [!CAUTION] **Critical Finding: Key ID (KID) Manipulation**
+> The JWT header contains a `kid` (Key ID) parameter pointing to a local file path: `/var/www/mykey.key`. This suggests the server uses this file to verify the signature. If the server is vulnerable to **KID injection**, an attacker could potentially point this to a known file (like `/dev/null`) to forge valid tokens.
+
+---
+
+🧠 Technical Token Breakdown
+The decoded JWT provides deep insight into the application's authorization logic and internal file structure.
+
+Signature Algorithm: The token uses HS256 (HMAC with SHA-256), a symmetric signing algorithm.
+
+Key ID (KID) Exposure: The kid field explicitly reveals the server-side location of the validation key: /var/www/mykey.key. This is a significant information leak.
+
+Temporal Constraints: The iat (Issued At) and exp (Expiration) fields define a strict 1-hour access window, using Unix timestamp format.
+
+Identity Claims: The payload identifies the current session as user_id: 1 with a restricted role: user, confirming the need for privilege escalation to gain full administrative control.
+
+🐚 Command Execution Analysis
+With the JWT in hand, the execute_command.php endpoint was tested via Burp Suite to verify the backend's response to system commands.
+
+<div align="center"> <img src="./images/image-14.png" width="1000" alt="Command Execution Interception">
+
+<em>Figure: Intercepting the JSON-based command execution request.</em> </div>
+
+📌 Observation: The server expects a JSON payload containing the command key. The presence of the Authorization: Bearer <JWT> header is mandatory for the server to process the request. Any attempt to modify the command without a valid signature results in an authorization error.
+
+
+🛠️ Automated Command Injection Fuzzing
+A Python script was developed to automate the identification of executable system commands via the execute_command.php endpoint. This tool leverages the previously captured JWT for authorized access.
+
+<details> <summary><b>📄 Click to view the Fuzzing Script (Python)</b></summary>
 
 ```python
 
@@ -669,35 +724,92 @@ if __name__ == "__main__":
     start_fuzz()
 
 ```
+</details>
+<br>
 
-> Command Fuzz
-> 
-![alt text](./images/image-15.png)
+⚙️ Script Features & Logic
+Header & Cookie Persistence: The script automatically injects the Authorization: Bearer header and sets the persistentSession cookie to no to satisfy the client-side checks identified during reconnaissance.
+
+Response Parsing: It implements a success detection logic by looking for the "output" key in the JSON response, effectively filtering out blocked commands or generic errors.
+
+Connection Optimization: Uses requests.Session() to maintain an active TCP connection, significantly increasing the speed of the fuzzing process.
+
+Visual Feedback: Provides real-time feedback with color-coded success messages and progress indicators (. for failed attempts, X for timeouts).
+
+🎯 Command Fuzzing Results
+The execution of the Python fuzzer against the execute_command.php endpoint provided critical insights into the server's command filtering policy.
+
+<div align="center"> <img src="./images/image-15.png" width="1000" alt="Command Fuzzing Terminal Output">
 
 
-## **Finding the Attack Vector and Bypassing the Whitelist**
+<em>Figure: Terminal output showing successful command execution for allowed system binaries.</em> </div>
 
-While intercepting requests to the `/execute_command.php` endpoint, I noticed that the server expected a JSON object containing a command. However, when attempting common enumeration commands, I received error messages indicating the presence of a **whitelist** (or a filter for allowed commands).
+📊 Fuzzing Analysis & Observations
+Allowed Binaries: The fuzzer identified that basic reconnaissance commands such as ls, whoami, and pwd are processed and return valid output within the JSON response.
 
-To efficiently identify which commands were accepted by the system, I developed a Python script to perform **fuzzing** on the endpoint. The script automated the submission of a command wordlist, handled the JWT authentication, and validated the server's responses.
+Blacklist Mechanism: Most standard command chaining operators (e.g., ;, &&, ||) and advanced binaries were successfully blocked or returned no output, suggesting a whitelist-based filter or a very restrictive blacklist.
 
-**Fuzzing Results:**
-Through this automation, I discovered that the `ls` command was permitted. The server responded with a JSON object containing an `"output"` key, revealing the file structure of the web directory:
+Response Structure: Successful commands consistently return a 200 OK status with an output field containing the base64-decoded or raw string representation of the system execution.
 
-![alt text](./images/image-16.png)
+[!NOTE] The discovery of even limited command execution (ls) confirms a Remote Code Execution (RCE) vulnerability. The next objective is to identify a bypass for the character filter to escalate this into a full reverse shell or to read sensitive files like the validation key /var/www/mykey.key.
+
+---
+
+🎯 Finding the Attack Vector and Bypassing the Whitelist
+While intercepting requests to the /execute_command.php endpoint, I noticed that the server expected a JSON object containing a command. However, initial manual testing with common enumeration commands triggered error messages, indicating the presence of a strict whitelist or a restrictive command filter.
+
+To efficiently map the allowed execution surface, I developed a Python script to perform fuzzing on the endpoint. The script automated:
+
+Command Submission: Sending payloads via the required JSON structure.
+
+Authentication Handling: Injecting the hardcoded JWT in each request.
+
+Validation: Filtering server responses to identify successful executions.
+
+📊 Fuzzing Results & Directory Reconnaissance
+Through this automation, I discovered that the ls command was permitted. The server responded with a JSON object containing an "output" key, revealing the internal file structure of the web directory.
+
+<div align="center"> <img src="./images/image-16.png" width="700" alt="ls command output and directory structure">
+
+
+<em>Figure: Successful 'ls' execution revealing the server's web root content.</em> </div>
+
+[!IMPORTANT] Strategic Analysis The fact that ls is allowed but other commands are blocked confirms that the application uses a Blacklist/Whitelist filter. However, even a single permitted command like ls can be leveraged to discover sensitive files (like the .key file mentioned in the JWT header) or to test for command injection via shell metacharacters that might not be filtered (e.g., |, ;, or backticks).
 
 ## **Exfiltrating the Signing Key for JWT Forgery**
 
-After identifying the file redacted`.key` through RCE enumeration, I successfully downloaded it using `curl`. The file contained a 32-character string: `56058354Redactedfabd7a7d7`.
+#### 🔑 **Key Retrieval & Technical Impact**
+After identifying the sensitive `.key` file through RCE enumeration, I successfully exfiltrated its content. The file contained a 32-character string: `56058354Redactedfabd7a7d7`. 
 
-Analysis of the initial JWT captured during the session revealed that the application uses a hardcoded or local key for signature verification. By obtaining this key, the attack vector shifts from **Command Injection** to **Broken Authentication**.
+Analysis of the initial JWT captured during the session revealed that the application uses a local file for signature verification (referenced in the `kid` header). By obtaining this key, the attack vector shifts from **Command Injection** to **Broken Authentication (JWT Forgery)**.
 
-**Exploitation Strategy:**
-With the signing key in hand, I can now forge a custom JWT. By modifying the payload to change the `user_id` to `1` or the `role` to `admin`, and re-signing the token using the exfiltrated key, I can escalate privileges and bypass the application's security boundaries.
+---
 
-![alt text](./images/image-17.png)
+#### 🛠️ **Exploitation Strategy: Privilege Escalation**
 
-To finalize the attack, I leveraged the stolen key to sign a custom-made JWT. The script below automates the creation of this token, ensuring the iat (Issued At) and exp (Expiration) claims are valid, while elevating the role to admin. This forged identity allows for full access to the restricted administrative dashboard.
+With the signing key in hand, the goal is to forge a custom JWT to gain administrative control. The process involves:
+
+1.  **Payload Modification:** Changing the `role` from `user` to `admin` and ensuring the `user_id` is set to the target account.
+2.  **Cryptographic Forgery:** Re-signing the modified token using the **HS256** algorithm with the exfiltrated 32-character key.
+3.  **Authentication Bypass:** Replacing the browser's token with the forged one to bypass all server-side permission checks.
+
+<div align="center">
+  <img src="./images/image-17.png" width="1000" alt="JWT Forgery with Exfiltrated Key">
+  <br>
+  <em>Figure: Process of forging a high-privilege JWT using the stolen signing key.</em>
+</div>
+
+
+
+---
+
+> [!CAUTION] **Security Implication**
+> The storage of the signing key in a location accessible via the web server's user, combined with an RCE vulnerability, allows for a complete collapse of the application's trust model. Once the key is leaked, the attacker "becomes" the server's authority.
+
+🔨 Final Exploit: Identity Forgery & Privilege Escalation
+To finalize the attack, the exfiltrated key was used to sign a custom-made JWT. This forged identity bypasses the application's role-based access control (RBAC) by elevating the session's privileges to admin.
+
+<details> <summary><b>📄 Click to view the JWT Forgery Script (Python)</b></summary>
 
 ```python
 
@@ -751,26 +863,47 @@ if __name__ == "__main__":
     generate_admin_token()
 
 ```
-![alt text](./images/image-18.png)
 
-![alt text](./images/image-19.png)
+</details>
+<br>
 
-## The attack on the Hammer laboratory demonstrated a complete exploitation chain, ranging from an injection flaw to the total compromise of the authentication system:
+🏁 Final Exploitation & Flag Capture
+The attack reached its objective by combining the forged JWT with the administrative interface. By maintaining the user_id: 1 but altering the role: admin, the server identified the session as a legitimate administrator.
 
-**Reconnaissance and Fuzzing:** Using a custom Python script, I automated the bypass of a command whitelist on the `/execute_command.php` endpoint, identifying that the `ls` command was permitted.
-**Exfiltration via RCE:** By leveraging Remote Code Execution, I located and extracted the signing key REDACT.`key` directly from the web root, bypassing Apache server access restrictions.
-**Broken Authentication:** Analysis of the JWT revealed the use of the HS256 algorithm. Using the exfiltrated key, I forged a new token with administrative privileges.
-**Impact:** This privilege escalation granted full access to the administrative dashboard (`dashboard.php`), resulting in the total compromise of the application and the underlying system.
-___
-___
-___
-___
-___
-# **PWNED! 🚩**
-> **By Hirt, Nelson**
+<div align="center"> <img src="./images/image-18.png" width="1000" alt="Forged JWT Generation">
 
-```text
-  [+] System Compromised
-  [+] Admin Access Granted
-  [+] All Flags Captured
+
+<em>Figure: Execution of the forgery script using the exfiltrated key to generate a high-privilege token.</em> </div>
+
+🏆 Administrative Command Execution
+Using the forged token, the cryptographic signature check passed as legitimate, granting unrestricted access to the dashboard and the final system flag.
+
+<div align="center"> <img src="./images/image-19.png" width="1000" alt="Final Flag Captured">
+
+
+<em>Figure: Dashboard interface showing the final system flag.</em> </div>
+
+🔒 Final Security Assessment: Hammer Laboratory
+The compromise of the Hammer laboratory demonstrated a complete exploitation chain:
+
+🔬 Attack Pillar 1: Reconnaissance & Fuzzing
+Automated bypass of the command whitelist on /execute_command.php. While the system was hardened against common injections, the permitted ls command provided the necessary directory traversal foothold.
+
+📂 Attack Pillar 2: Exfiltration via RCE
+Leveraged the RCE to locate and extract the signing key REDACTED.key. This confirmed that sensitive configuration files were improperly stored within the web root.
+
+🔑 Attack Pillar 3: Broken Authentication
+Forged a custom JWT using the HS256 algorithm. The vulnerability in the kid header allowed for a total identity hijacking by elevating the user role to admin.
+
+💥 Business Impact
+This chain of vulnerabilities resulted in the total compromise of the application and the underlying server infrastructure, allowing for full data exfiltration and unauthorized system control.
+
+> PWNED! 🚩
+By Hirt, Nelson
+
+
+  
+
+
+
 
