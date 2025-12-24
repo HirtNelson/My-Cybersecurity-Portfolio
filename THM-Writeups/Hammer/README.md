@@ -251,18 +251,6 @@ Following the generic responses from the login portal, the investigation moved t
 
 > **🔍 Observation:** > The form requires a registered email address to initiate the recovery process. Unlike the login page, the behavior of this form under different inputs was analyzed to determine if it leaks information about valid user accounts.
 
-#### 🔄 **Password Recovery Interface**
-Following the generic responses from the login portal, the investigation moved to the Password Reset functionality. This page represents a secondary attack surface for potential user enumeration.
-
-<div align="center">
-  <img src="./images/reset_page.png" width="600" alt="Reset Password Page">
-  <br>
-  <em>Figure: Password recovery interface identified on port 1337.</em>
-</div>
-
----
-
-> **🔍 Observation:** > The form requires a registered email address to initiate the recovery process. Unlike the login page, the behavior of this form under different inputs was analyzed to determine if it leaks information about valid user accounts.
 
 #### ⌨️ **Source Code Analysis: Reset Password Page**
 A manual review of the recovery page's source code was performed to identify client-side logic that could be exploited during the attack.
