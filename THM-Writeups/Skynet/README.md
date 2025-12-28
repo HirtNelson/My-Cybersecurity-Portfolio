@@ -1,9 +1,9 @@
 <table>
   <tr>
     <td>
-      <img src="./images/unnamed.jpg" width="900">
+      <img src="./images/unnamed.jpg" width="300">
     </td>
-    <td width="900">
+    <td width="800">
       <h1>Skynet — Write-up</h1>
       <p>Deploy and compromise the target machine to retrieve the user and root flags.</p>
       <p><strong>Difficulty:</strong> Easy 🟢</p>
