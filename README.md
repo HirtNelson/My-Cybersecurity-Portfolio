@@ -6,13 +6,8 @@ Welcome! This repository contains my technical write-ups and documentation for v
 
 | Machine | Difficulty | Focus | Link |
 | :--- | :--- | :--- | :--- |
-| **Hammer** | Medium | JWT Bypass & RCE | [Read More](./THM-Writeups/Hammer/README.md) |
-
----
-| Machine | Difficulty | Focus | Link |
-| :--- | :--- | :--- | :--- |
-| **Skynet** | Easy | Cuppa CMS LFI/RFI | [Read More](./THM-Writeups/Skynet/README.md) |
-
+| **Hammer** | Medium | JWT Bypass & RCE  | [Read More](./THM-Writeups/Hammer/README.md) |
+| **Skynet** | Easy   | Cuppa CMS LFI/RFI | [Read More](./THM-Writeups/Skynet/README.md) |
 ---
 
 *Created by Nelson Hirt*
