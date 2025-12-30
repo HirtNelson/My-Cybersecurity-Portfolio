@@ -8,7 +8,7 @@ Welcome! This repository contains my technical write-ups and documentation for v
 | :----------| :--------------------------------------------| 
 | **Hammer** | [Read More](./THM-Writeups/Hammer/README.md) |
 | **Skynet** | [Read More](./THM-Writeups/Skynet/README.md) |
-| **Skynet** | [Read More](./THM-Writeups/Expose/README.md) |
+| **Expose** | [Read More](./THM-Writeups/Expose/README.md) |
 ---
 
 *Created by Nelson Hirt*
