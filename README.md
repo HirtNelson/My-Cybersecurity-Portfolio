@@ -4,10 +4,11 @@ Welcome! This repository contains my technical write-ups and documentation for v
 
 ## 🚩 TryHackMe Write-ups
 
-| Machine | Difficulty | Focus | Link |
-| :--- | :--- | :--- | :--- |
-| **Hammer** | Medium | JWT Bypass & RCE  | [Read More](./THM-Writeups/Hammer/README.md) |
-| **Skynet** | Easy   | Cuppa CMS LFI/RFI | [Read More](./THM-Writeups/Skynet/README.md) |
+| Machine    |  Link                                        |
+| :----------| :--------------------------------------------| 
+| **Hammer** | [Read More](./THM-Writeups/Hammer/README.md) |
+| **Skynet** | [Read More](./THM-Writeups/Skynet/README.md) |
+| **Skynet** | [Read More](./THM-Writeups/Expose/README.md) |
 ---
 
 *Created by Nelson Hirt*
