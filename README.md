@@ -17,7 +17,8 @@ Explore my step-by-step walkthroughs, ranging from initial reconnaissance to ful
 | **Expose** | 🟢 Easy | SQLi / Fuzzing | [📂 View](./THM-Writeups/Expose/README.md) |
 | **ToolsRus** | 🟢 Easy | Tomcat / Hydra | [📂 View](./THM-Writeups/ToolsRus/README.md) |
 | **Basic Pentesting** | 🟢 Easy | Brute Force / PrivEsc | [📂 View](./THM-Writeups/Basic_Pentesting/README.md) |
-  **RootMe**   | 🟢 Easy  | Insecure file upload | [📂 View](./THM-Writeups/RootMe/README.md) |
+| **RootMe**   | 🟢 Easy  | Insecure file upload | [📂 View](./THM-Writeups/RootMe/README.md) |
+|  **Billing** | 🟢 Easy   | ******************|  [📂 View](./THM-Writeups/Billing/README.md) |
 
 ---
 
