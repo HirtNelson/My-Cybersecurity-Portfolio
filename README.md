@@ -20,6 +20,7 @@ Below you’ll find detailed, step-by-step walkthroughs of TryHackMe rooms, cove
 | **RootMe** | 🟢 Easy | Insecure File Upload | [📂 View](./THM-Writeups/RootMe/README.md) |
 | **Billing** | 🟢 Easy | Web App Misconfiguration | [📂 View](./THM-Writeups/Billing/README.md) |
 | **LazyAdmin** | 🟢 Easy | Web App Misconfiguration | [📂 View](./THM-Writeups/LazyAdmin/README.md) |
+| **Brains** | 🟢 Easy | CVE-2024-27198 | [📂 View](./THM-Writeups/Brains/README.md) |
 
 ---
 
