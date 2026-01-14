@@ -10,17 +10,16 @@ This project reflects my hands-on learning process, focusing on **reconnaissance
 
 Below you’ll find detailed, step-by-step walkthroughs of TryHackMe rooms, covering everything from initial enumeration to full system compromise.
 
-| Room | Difficulty | Focus | Write-up |
-| :--- | :---: | :--- | :---: |
-| **Hammer** | 🟢 Easy  | Web / Logic Flaws | [📂 View](./THM-Writeups/Hammer/README.md) |
-| **Skynet** |  🟡 Medium | SMB / CMS Exploitation | [📂 View](./THM-Writeups/Skynet/README.md) |
-| **Expose** | 🟢 Easy | SQL Injection / Fuzzing | [📂 View](./THM-Writeups/Expose/README.md) |
-| **ToolsRus** | 🟢 Easy | Tomcat / Hydra | [📂 View](./THM-Writeups/ToolsRus/README.md) |
-| **Basic Pentesting** | 🟢 Easy | Brute Force / Privilege Escalation | [📂 View](./THM-Writeups/Basic_Pentesting/README.md) |
-| **RootMe** | 🟢 Easy | Insecure File Upload | [📂 View](./THM-Writeups/RootMe/README.md) |
-| **Billing** | 🟢 Easy | Web App Misconfiguration | [📂 View](./THM-Writeups/Billing/README.md) |
-| **LazyAdmin** | 🟢 Easy | Web App Misconfiguration | [📂 View](./THM-Writeups/LazyAdmin/README.md) |
-| **Brains** | 🟢 Easy | CVE-2024-27198 | [📂 View](./THM-Writeups/Brains/README.md) |
+- [Hammer](./THM-Writeups/Hammer/README.md)
+- [Skynet](./THM-Writeups/Skynet/README.md)
+- [Expose](./THM-Writeups/Expose/README.md)
+- [ToolsRus](./THM-Writeups/ToolsRus/README.md)
+- [Basic Pentesting](./THM-Writeups/Basic_Pentesting/README.md)
+- [RootMe](./THM-Writeups/RootMe/README.md)
+- [Billing](./THM-Writeups/Billing/README.md)
+- [LazyAdmin](./THM-Writeups/LazyAdmin/README.md)
+- [Brains](./THM-Writeups/Brains/README.md)
+- [Pyrat](./THM-Writeups/Pyrat/README.md)
 
 ---
 
