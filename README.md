@@ -22,6 +22,7 @@ Each write-up documents the full attack lifecycle, including enumeration, exploi
 - [LazyAdmin](./THM-Writeups/LazyAdmin/README.md)
 - [Brains](./THM-Writeups/Brains/README.md)
 - [Pyrat](./THM-Writeups/Pyrat/README.md)
+- [Second](./THM-Writeups/Second/README.md)
 
 ---
 
