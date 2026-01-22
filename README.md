@@ -1,14 +1,16 @@
-# 🛡️ Nelson Hirt | Cybersecurity Portfolio
+# Nelson Hirt — Cybersecurity Portfolio
 
-Welcome! This repository is my personal cybersecurity knowledge base, containing technical write-ups, notes, and documented methodologies used while solving CTF machines and security challenges.
+This repository serves as my personal cybersecurity portfolio and knowledge base.  
+It contains technical write-ups, notes, and documented methodologies derived from hands-on practice with CTF environments and security challenges.
 
-This project reflects my hands-on learning process, focusing on **reconnaissance, exploitation, privilege escalation**, and—most importantly—**clear technical documentation**.
+The primary focus of this repository is not only exploitation, but **methodical reasoning, attack chaining, and clear technical documentation**.
 
 ---
 
-## 🚩 TryHackMe Write-ups
+## TryHackMe Write-ups
 
-Below you’ll find detailed, step-by-step walkthroughs of TryHackMe rooms, covering everything from initial enumeration to full system compromise.
+Below is a collection of detailed walkthroughs for selected TryHackMe rooms.  
+Each write-up documents the full attack lifecycle, including enumeration, exploitation, lateral movement, and privilege escalation.
 
 - [Hammer](./THM-Writeups/Hammer/README.md)
 - [Skynet](./THM-Writeups/Skynet/README.md)
@@ -23,31 +25,48 @@ Below you’ll find detailed, step-by-step walkthroughs of TryHackMe rooms, cove
 
 ---
 
-## 🛠️ Toolbelt & Skills
+## Technical Focus
 
-The following tools and technologies are commonly used throughout my write-ups:
+Throughout the write-ups, the following areas are consistently explored:
 
-![Kali Linux](https://img.shields.io/badge/OS-Kali_Linux-blue?style=flat-square&logo=kali-linux)
-![Nmap](https://img.shields.io/badge/Recon-Nmap-red?style=flat-square)
-![Metasploit](https://img.shields.io/badge/Exploitation-Metasploit-blue?style=flat-square)
-![Burp Suite](https://img.shields.io/badge/Web-Burp_Suite-orange?style=flat-square)
-![Wireshark](https://img.shields.io/badge/Network-Wireshark-blue?style=flat-square)
-
----
-
-## 🎯 Goals
-
-- Build a solid pentesting foundation
-- Document real attack methodologies
-- Improve technical writing and reporting
-- Maintain an organized and evolving learning log
+- Network and service enumeration
+- Web application security testing
+- Authentication and access control weaknesses
+- Server-Side vulnerabilities (SQLi, SSTI, misconfigurations)
+- Privilege escalation techniques
+- Post-exploitation analysis
+- Technical reporting and documentation
 
 ---
 
-## 📫 Connect with me
+## Tools and Environment
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/SEU-PERFIL)
+The labs and write-ups primarily rely on standard offensive security tooling, including:
+
+- Kali Linux
+- Nmap
+- Burp Suite
+- Metasploit Framework
+- Wireshark
+- Custom scripts when automation is required
+
+Tool usage is documented only when it adds technical value to the attack narrative.
 
 ---
 
-*Developed by **Nelson Hirt** — 2026*
+## Objectives
+
+- Develop a solid foundation in offensive security
+- Practice real-world attack methodologies in controlled environments
+- Improve technical reasoning and reporting skills
+- Maintain a structured and evolving learning repository
+
+---
+
+## Contact
+
+- LinkedIn: https://www.linkedin.com/in/SEU-PERFIL
+
+---
+
+Written by **Nelson Hirt**
