@@ -23,7 +23,8 @@ Each write-up documents the full attack lifecycle, including enumeration, exploi
 - [Brains](./THM-Writeups/Brains/README.md)
 - [Pyrat](./THM-Writeups/Pyrat/README.md)
 - [Second](./THM-Writeups/Second/README.md)
-
+- [Padelify](./THM-Writeups/Padelify/README.md)
+- [Extract](./THM-Writeups/Extract/README.md)
 ---
 
 ## Technical Focus
